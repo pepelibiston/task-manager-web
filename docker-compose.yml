@@ -1,0 +1,74 @@
+# Se define la red
+networks:
+  laravel_network:
+    driver: bridge
+
+# Crear volumenes para las DBs
+volumes:
+  db_serve1_data:
+    driver: local
+  db_serve2_data:
+    driver: local
+  db_serve3_data:
+    driver: local
+
+services:
+  # Servicio PostgreSQL
+  db_server1:
+    image: postgres:13 # servicio:version nombre de la imagen a utilizar
+    container_name: db_server1
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: auth_db # Nombre de la DB
+    ports:
+      - "5450:5432"
+    volumes:
+      - db_serve1_data:/var/lib/postgresql/data # Nombre dek volume correspondiente
+    networks:
+      - laravel_network
+
+  # Servicio Mysql
+  db_server3:
+    image: mysql:8.0 # servicio:version nombre de la imagen a utilizar
+    container_name: db_server3
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: order_db
+      MYSQL_PASSWORD: root
+    ports:
+      - "3311:3306"
+    volumes:
+      - db_serve2_data:/data/db # Nombre dek volume correspondiente
+    networks:
+      - laravel_network
+
+  auth-service:
+    build:
+      context: ./laravel-jwt-api-starter-main
+      dockerfile: Dockerfile
+    container_name: auth-service
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    working_dir: /var/www/html
+    # temporal para pruebas
+    volumes:
+      - ./laravel-jwt-api-starter-main:/var/www/html
+    environment:
+      APP_ENV: local
+      APP_DEBUG: true
+      APP_KEY: base64:qmprkpImFZnb1i47fFzUoMOEllVC6Ski15JCytKZsQc=
+      DB_HOST: db_server1
+      DB_CONNECTION: pgsql
+      DB_PORT: 5432
+      DB_DATABASE: auth_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_SECRET: QjT1cMO3euXYspkKnT9wgTpQ7qnoEKmZ6eBwXZPlUbwEnjVel11ugut4dOYOlCtG
+    depends_on:
+      - db_server1
+    networks:
+      - laravel_network
