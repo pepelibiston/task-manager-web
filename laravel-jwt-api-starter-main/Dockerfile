@@ -47,8 +47,11 @@ COPY . .
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
 # Configurar permisos (necesario para logs y cache)  <<< Probar a eliminar esto
-# RUN chown -R www-data:www-data /var/www/html \
-#    && chmod -R 775 storage bootstrap/cache
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # Habilitar el módulo de reescritura de Apache (necesario para rutas de Laravel)
 RUN a2enmod rewrite
