@@ -20,3 +20,4 @@ Route::post('register', [AuthController::class, 'register']);
 
 // Endpoint protegido por JWT
 Route::middleware('auth:api')->get('user', [AuthController::class, 'me']);
+Route::middleware('auth:api')->post('logout', [AuthController::class, 'logout']);

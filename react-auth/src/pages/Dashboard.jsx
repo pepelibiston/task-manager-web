@@ -1,6 +1,10 @@
 import { useAuth } from '../context/AuthContext';
 import { useState } from 'react';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import {
+  DragDropContext,
+  Droppable,
+  Draggable
+} from '@hello-pangea/dnd';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();

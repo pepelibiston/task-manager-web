@@ -11,6 +11,8 @@ volumes:
     driver: local
   db_serve3_data:
     driver: local
+  react_node_modules:
+    driver: local
 
 services:
   # Servicio PostgreSQL
@@ -36,7 +38,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: order_db
+      MYSQL_DATABASE: task_db
       MYSQL_PASSWORD: root
     ports:
       - "3311:3306"
@@ -72,3 +74,18 @@ services:
       - db_server1
     networks:
       - laravel_network
+
+  react-auth:
+    image: node:20
+    container_name: react-auth
+    working_dir: /app
+    volumes:
+      - ./react-auth:/app
+      - react_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    networks:
+      - laravel_network
+    depends_on:
+      - auth-service
