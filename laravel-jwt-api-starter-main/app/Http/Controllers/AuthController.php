@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Support\Traits\Authenticatable;
 use App\Support\Exceptions\OAuthException;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
@@ -46,8 +47,14 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        if (!$token = Auth::attempt(credentials: $request->credentials())) {
-            throw new OAuthException(code: 'invalid_credentials_provided');
+        $token = JWTAuth::claims([
+            'iss' => config('jwt.issuer'),
+        ])->attempt($request->credentials());
+
+        if (!$token) {
+            throw new OAuthException(
+                code: 'invalid_credentials_provided'
+            );
         }
 
         return $this->responseWithToken($token);

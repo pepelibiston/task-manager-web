@@ -44,46 +44,11 @@ return [
     |
     */
 
-    'keys' => [
-
-        /*
-        |--------------------------------------------------------------------------
-        | Public Key
-        |--------------------------------------------------------------------------
-        |
-        | A path or resource to your public key.
-        |
-        | E.g. 'file://path/to/public/key'
-        |
-        */
-
-        'public' => env('JWT_PUBLIC_KEY'),
-
-        /*
-        |--------------------------------------------------------------------------
-        | Private Key
-        |--------------------------------------------------------------------------
-        |
-        | A path or resource to your private key.
-        |
-        | E.g. 'file://path/to/private/key'
-        |
-        */
-
-        'private' => env('JWT_PRIVATE_KEY'),
-
-        /*
-        |--------------------------------------------------------------------------
-        | Passphrase
-        |--------------------------------------------------------------------------
-        |
-        | The passphrase for your private key. Can be null if none set.
-        |
-        */
-
-        'passphrase' => env('JWT_PASSPHRASE'),
-
-    ],
+'keys' => [
+    'public' => file_get_contents(storage_path('keys/jwt-public.pem')),
+    'private' => file_get_contents(storage_path('keys/jwt-private.pem')),
+    'passphrase' => env('JWT_PASSPHRASE', null),
+],
 
     /*
     |--------------------------------------------------------------------------
@@ -131,7 +96,7 @@ return [
     |
     */
 
-    'algo' => env('JWT_ALGO', Tymon\JWTAuth\Providers\JWT\Provider::ALGO_HS256),
+    'algo' => env('JWT_ALGO', Tymon\JWTAuth\Providers\JWT\Provider::ALGO_RS256),
 
     /*
     |--------------------------------------------------------------------------
@@ -143,6 +108,8 @@ return [
     | present in the payload.
     |
     */
+
+    'issuer' => env('JWT_ISSUER', 'auth-service'),
 
     'required_claims' => [
         'iss',
