@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import api from "../api/axios";
+import apiAuth from "../api/axios";
 import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext();
@@ -13,8 +13,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      api
+      apiAuth.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      apiAuth
         .get("/user")
         .then((res) => {
           setUser(res.data);
@@ -32,15 +32,15 @@ export const AuthProvider = ({ children }) => {
   // ✅ Login
   const login = async (email, password) => {
     try {
-      const res = await api.post("/login", { email, password });
+      const res = await apiAuth.post("/login", { email, password });
       const token = res.data.authorization.token || res.data.authorization.access_token;
 
       // Guarda token
       localStorage.setItem("token", token);
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      apiAuth.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       // Obtén usuario
-      const userRes = await api.get("/user");
+      const userRes = await apiAuth.get("/user");
       setUser(userRes.data);
 
       navigate("/dashboard");
@@ -53,15 +53,15 @@ export const AuthProvider = ({ children }) => {
     // ✅ Register
   const register = async (name, email, password) => {
     try {
-      const res = await api.post("/register", { name, email, password });
+      const res = await apiAuth.post("/register", { name, email, password });
       const token = res.data.authorization.token || res.data.authorization.access_token;
 
       // Guarda token
       localStorage.setItem("token", token);
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      apiAuth.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       // Obtén usuario
-      const userRes = await api.get("/user");
+      const userRes = await apiAuth.get("/user");
       setUser(userRes.data);
 
       navigate("/dashboard");
@@ -74,12 +74,12 @@ export const AuthProvider = ({ children }) => {
   // ✅ Logout
   const logout = async () => {
     try {
-      await api.post("/logout");
+      await apiAuth.post("/logout");
     } catch (err) {
       console.warn("Error en logout (token ya expirado o inválido)", err);
     } finally {
       localStorage.removeItem("token");
-      delete api.defaults.headers.common["Authorization"];
+      delete apiAuth.defaults.headers.common["Authorization"];
       setUser(null);
       navigate("/login");
     }
@@ -87,12 +87,12 @@ export const AuthProvider = ({ children }) => {
 
   const refreshToken = async () => {
   try {
-    const res = await api.post("/refresh");
+    const res = await apiAuth.post("/refresh");
     const newToken = res.data.authorization?.access_token;
 
     // ✅ Guardar el nuevo token
     localStorage.setItem("token", newToken);
-    api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+    apiAuth.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
 
     console.log("🔄 Token renovado automáticamente");
   } catch (err) {

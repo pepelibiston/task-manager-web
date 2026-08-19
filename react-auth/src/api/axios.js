@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+const apiAuth = axios.create({
+  baseURL: import.meta.env.VITE_AUTH_API_URL,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -9,7 +9,7 @@ const api = axios.create({
 });
 
 // Añadir automáticamente el JWT
-api.interceptors.request.use(
+apiAuth.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
 
@@ -23,7 +23,7 @@ api.interceptors.request.use(
 );
 
 // Gestionar respuestas
-api.interceptors.response.use(
+apiAuth.interceptors.response.use(
   (response) => response,
 
   async (error) => {
@@ -49,19 +49,19 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const response = await api.post("/refresh");
+        const response = await apiAuth.post("/refresh");
 
         const newToken =
           response.data.authorization?.token ||
           response.data.authorization?.access_token;
 
         if (!newToken) {
-          throw new Error("La API no devolvió un nuevo token");
+          throw new Error("La apiAuth no devolvió un nuevo token");
         }
 
         localStorage.setItem("token", newToken);
 
-        api.defaults.headers.common["Authorization"] =
+        apiAuth.defaults.headers.common["Authorization"] =
           `Bearer ${newToken}`;
 
         originalRequest.headers.Authorization =
@@ -69,7 +69,7 @@ api.interceptors.response.use(
 
         console.log("🔄 Token renovado automáticamente");
 
-        return api(originalRequest);
+        return apiAuth(originalRequest);
 
       } catch (refreshError) {
         console.error(
@@ -78,7 +78,7 @@ api.interceptors.response.use(
         );
 
         localStorage.removeItem("token");
-        delete api.defaults.headers.common["Authorization"];
+        delete apiAuth.defaults.headers.common["Authorization"];
 
         window.location.href = "/login";
 
@@ -90,4 +90,4 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
+export default apiAuth;
