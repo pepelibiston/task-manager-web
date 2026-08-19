@@ -75,6 +75,32 @@ services:
     networks:
       - laravel_network
 
+  task-service:
+    build:
+      context: ./laravel-task-api
+      dockerfile: Dockerfile
+    container_name: task-service
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    working_dir: /var/www/html
+    volumes:
+      - ./laravel-task-api:/var/www/html
+    environment:
+      APP_ENV: local
+      APP_DEBUG: true
+      APP_KEY: base64:TU_APP_KEY
+      DB_HOST: db_server3
+      DB_CONNECTION: mysql
+      DB_PORT: 3306
+      DB_DATABASE: task_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    depends_on:
+      - db_server3
+    networks:
+      - laravel_network
+
   react-auth:
     image: node:20
     container_name: react-auth
