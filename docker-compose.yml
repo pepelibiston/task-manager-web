@@ -99,6 +99,9 @@ services:
       DB_DATABASE: task_db
       DB_USERNAME: root
       DB_PASSWORD: root
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_ISSUER: auth-service
     depends_on:
       - db_server3
     networks:
