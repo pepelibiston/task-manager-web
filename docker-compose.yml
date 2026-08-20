@@ -69,7 +69,10 @@ services:
       DB_DATABASE: auth_db
       DB_USERNAME: root
       DB_PASSWORD: root
-      JWT_SECRET: QjT1cMO3euXYspkKnT9wgTpQ7qnoEKmZ6eBwXZPlUbwEnjVel11ugut4dOYOlCtG
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_PASSPHRASE: null
+      JWT_ISSUER: auth-service
     depends_on:
       - db_server1
     networks:
