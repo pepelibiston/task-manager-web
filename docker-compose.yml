@@ -43,7 +43,7 @@ services:
     ports:
       - "3311:3306"
     volumes:
-      - db_serve2_data:/data/db # Nombre dek volume correspondiente
+      - db_serve2_data:/var/lib/mysql # Nombre dek volume correspondiente
     networks:
       - laravel_network
 

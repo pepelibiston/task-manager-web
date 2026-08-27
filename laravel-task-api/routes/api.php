@@ -14,4 +14,4 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::apiResource('tasks', TaskController::class);
+Route::middleware('jwt')->apiResource('tasks', TaskController::class);

@@ -8,7 +8,12 @@ use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
-    public function index(){
+    public function index(Request $request){
+
+        $payload = $request->attributes->get('jwt');
+
+        $userId = $payload->sub;
+
         $tasks = Task::orderBy("id","desc")->paginate(10);
 
         return response()->json($tasks, 200);

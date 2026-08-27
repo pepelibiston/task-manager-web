@@ -45,8 +45,18 @@ return [
     */
 
     'keys' => [
-        'public' => file_get_contents(storage_path('keys/jwt-public.pem'))
+        'public' => file_get_contents(
+            storage_path('keys/jwt-public.pem')
+        ),
+
+        'private' => null,
+
+        'passphrase' => null,
     ],
+
+    'public_key' => base_path(
+        env('JWT_PUBLIC_KEY_PATH', 'storage/keys/jwt-public.pem')
+    ),
 
     /*
     |--------------------------------------------------------------------------
@@ -183,7 +193,7 @@ return [
     |
     */
 
-    'blacklist_enabled' => env('JWT_BLACKLIST_ENABLED', true),
+    'blacklist_enabled' => env('JWT_BLACKLIST_ENABLED', false),
 
     /*
     | -------------------------------------------------------------------------
