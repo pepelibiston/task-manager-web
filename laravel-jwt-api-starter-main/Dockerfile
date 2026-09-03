@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libicu-dev \
     libssl-dev \
     libcurl4-openssl-dev \
+    librdkafka-dev \
     pkg-config \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
@@ -32,6 +33,8 @@ RUN apt-get update && apt-get install -y \
         intl \
         zip \
         opcache \
+    && pecl install rdkafka \
+    && docker-php-ext-enable rdkafka \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Instalar Composer globalmente

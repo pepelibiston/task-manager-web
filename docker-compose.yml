@@ -13,6 +13,8 @@ volumes:
     driver: local
   react_node_modules:
     driver: local
+  kafka_data:
+    driver: local
 
 services:
   # Servicio PostgreSQL
@@ -73,6 +75,7 @@ services:
       JWT_TTL: 60
       JWT_PASSPHRASE: null
       JWT_ISSUER: auth-service
+      KAFKA_BROKERS: kafka:9092
     depends_on:
       - db_server1
     networks:
@@ -102,6 +105,7 @@ services:
       JWT_ALGO: RS256
       JWT_TTL: 60
       JWT_ISSUER: auth-service
+      KAFKA_BROKERS: kafka:9092
     depends_on:
       - db_server3
     networks:
@@ -121,3 +125,36 @@ services:
       - laravel_network
     depends_on:
       - auth-service
+
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      # KRaft
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      # Listener interno Docker + externo desde tu máquina
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      # Configuración básica
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+    networks:
+      - laravel_network

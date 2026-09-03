@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use App\Support\Traits\Authenticatable;
 use App\Support\Exceptions\OAuthException;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use App\Services\KafkaProducerService;
 
 class AuthController extends Controller
 {
@@ -56,6 +57,8 @@ class AuthController extends Controller
                 code: 'invalid_credentials_provided'
             );
         }
+
+        app(KafkaProducerService)->send('test-topic', 'login desde auth-service');
 
         return $this->responseWithToken($token);
     }
