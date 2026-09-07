@@ -49,7 +49,7 @@ services:
 
   auth-service:
     build:
-      context: ./laravel-jwt-api-starter-main
+      context: ./auth-service
       dockerfile: Dockerfile
     container_name: auth-service
     restart: unless-stopped
@@ -58,7 +58,7 @@ services:
     working_dir: /var/www/html
     # temporal para pruebas
     volumes:
-      - ./laravel-jwt-api-starter-main:/var/www/html
+      - ./auth-service:/var/www/html
     environment:
       APP_ENV: local
       APP_DEBUG: true
@@ -80,7 +80,7 @@ services:
 
   task-service:
     build:
-      context: ./laravel-task-api
+      context: ./task-service
       dockerfile: Dockerfile
     container_name: task-service
     restart: unless-stopped
@@ -88,7 +88,7 @@ services:
       - "8081:80"
     working_dir: /var/www/html
     volumes:
-      - ./laravel-task-api:/var/www/html
+      - ./task-service:/var/www/html
     environment:
       APP_ENV: local
       APP_DEBUG: true
