@@ -1,9 +1,9 @@
 
 services:
 
-  # ==========================================
-  # PostgreSQL - Auth Service
-  # ==========================================
+  # ============================================================
+  # POSTGRES - AUTH SERVICE
+  # ============================================================
   db_server1:
     image: postgres:13
 
@@ -13,7 +13,11 @@ services:
       POSTGRES_DB: auth_db
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root -d auth_db"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U root -d auth_db"
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,9 +26,9 @@ services:
       - ci_network
 
 
-  # ==========================================
-  # MySQL - Task Service
-  # ==========================================
+  # ============================================================
+  # MYSQL - TASK SERVICE
+  # ============================================================
   db_server3:
     image: mysql:8.0
 
@@ -51,9 +55,9 @@ services:
       - ci_network
 
 
-  # ==========================================
-  # Auth Service
-  # ==========================================
+  # ============================================================
+  # AUTH SERVICE - LARAVEL
+  # ============================================================
   auth-service:
     build:
       context: ./auth-service
@@ -78,6 +82,7 @@ services:
       JWT_ISSUER: auth-service
 
     volumes:
+      # Las claves son generadas temporalmente por GitHub Actions
       - ./ci-keys/auth:/var/www/html/storage/keys
 
     depends_on:
@@ -88,9 +93,9 @@ services:
       - ci_network
 
 
-  # ==========================================
-  # Task Service
-  # ==========================================
+  # ============================================================
+  # TASK SERVICE - LARAVEL
+  # ============================================================
   task-service:
     build:
       context: ./task-service
@@ -113,10 +118,9 @@ services:
       JWT_TTL: 60
       JWT_ISSUER: auth-service
 
-    # IMPORTANTE:
-    # Task solamente necesita la PUBLIC KEY
-    # que corresponde a la private key de auth-service.
     volumes:
+      # Task solamente necesita la clave pública
+      # generada a partir de la privada de auth-service
       - ./ci-keys/task:/var/www/html/storage/keys
 
     depends_on:
@@ -127,9 +131,9 @@ services:
       - ci_network
 
 
-  # ==========================================
-  # React
-  # ==========================================
+  # ============================================================
+  # REACT
+  # ============================================================
   react-auth:
     image: node:20
 
@@ -138,13 +142,18 @@ services:
     volumes:
       - ./react-auth:/app
 
+    # No necesitamos levantar Vite durante CI.
+    # El contenedor simplemente permanece ejecutándose
+    # para que GitHub Actions pueda ejecutar npm ci / npm run build.
     command: sleep infinity
 
     networks:
       - ci_network
 
 
+# ==============================================================
+# NETWORK
+# ==============================================================
 networks:
   ci_network:
     driver: bridge
-
