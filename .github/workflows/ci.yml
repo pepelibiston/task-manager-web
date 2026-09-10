@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test application
+    runs-on: ubuntu-latest
+
+    steps:
+      # --------------------------------------------------
+      # 1. Descargar código
+      # --------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Levantar infraestructura
+      # --------------------------------------------------
+      - name: Start Docker services
+        run: |
+          docker compose -f docker-compose.ci.yml up -d --build
+
+      # --------------------------------------------------
+      # 3. Esperar a que las bases de datos estén listas
+      # --------------------------------------------------
+      - name: Wait for databases
+        run: |
+          echo "Waiting for PostgreSQL..."
+          until docker compose -f docker-compose.ci.yml exec -T db_server1 \
+            pg_isready -U root -d auth_db; do
+            sleep 2
+          done
+
+          echo "PostgreSQL is ready"
+
+          echo "Waiting for MySQL..."
+          until docker compose -f docker-compose.ci.yml exec -T db_server3 \
+            mysqladmin ping -h localhost -u root -proot --silent; do
+            sleep 2
+          done
+
+          echo "MySQL is ready"
+
+      # --------------------------------------------------
+      # 4. Instalar dependencias Laravel
+      # --------------------------------------------------
+      - name: Install auth-service dependencies
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T auth-service \
+            composer install \
+            --no-interaction \
+            --prefer-dist \
+            --no-progress
+
+      - name: Install task-service dependencies
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T task-service \
+            composer install \
+            --no-interaction \
+            --prefer-dist \
+            --no-progress
+
+      # --------------------------------------------------
+      # 5. Preparar Laravel
+      # --------------------------------------------------
+      - name: Prepare auth-service
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T auth-service \
+            php artisan config:clear
+
+          docker compose -f docker-compose.ci.yml exec -T auth-service \
+            php artisan migrate --force
+
+      - name: Prepare task-service
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T task-service \
+            php artisan config:clear
+
+          docker compose -f docker-compose.ci.yml exec -T task-service \
+            php artisan migrate --force
+
+      # --------------------------------------------------
+      # 6. Ejecutar tests Laravel
+      # --------------------------------------------------
+      - name: Test auth-service
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T auth-service \
+            php artisan test
+
+      - name: Test task-service
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T task-service \
+            php artisan test
+
+      # --------------------------------------------------
+      # 7. Test frontend
+      # --------------------------------------------------
+      - name: Install React dependencies
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T react-auth \
+            npm ci
+
+      - name: Build React
+        run: |
+          docker compose -f docker-compose.ci.yml exec -T react-auth \
+            npm run build
+
+      # --------------------------------------------------
+      # 8. Mostrar logs si algo falla
+      # --------------------------------------------------
+      - name: Docker logs
+        if: failure()
+        run: |
+          docker compose -f docker-compose.ci.yml logs
+
+      # --------------------------------------------------
+      # 9. Limpiar
+      # --------------------------------------------------
+      - name: Shutdown
+        if: always()
+        run: |
+          docker compose -f docker-compose.ci.yml down -v

@@ -1,0 +1,116 @@
+
+networks:
+  ci_network:
+
+services:
+
+  # ==========================================
+  # PostgreSQL
+  # ==========================================
+  db_server1:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: auth_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ci_network
+
+  # ==========================================
+  # MySQL
+  # ==========================================
+  db_server3:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: task_db
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ci_network
+
+  # ==========================================
+  # Auth Service
+  # ==========================================
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+
+    working_dir: /var/www/html
+
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: false
+
+      DB_HOST: db_server1
+      DB_CONNECTION: pgsql
+      DB_PORT: 5432
+      DB_DATABASE: auth_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_PASSPHRASE: null
+      JWT_ISSUER: auth-service
+
+    depends_on:
+      - db_server1
+
+    networks:
+      - ci_network
+
+  # ==========================================
+  # Task Service
+  # ==========================================
+  task-service:
+    build:
+      context: ./task-service
+      dockerfile: Dockerfile
+
+    working_dir: /var/www/html
+
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: false
+
+      DB_HOST: db_server3
+      DB_CONNECTION: mysql
+      DB_PORT: 3306
+      DB_DATABASE: task_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_ISSUER: auth-service
+
+    depends_on:
+      - db_server3
+
+    networks:
+      - ci_network
+
+  # ==========================================
+  # React
+  # ==========================================
+  react-auth:
+    image: node:20
+    working_dir: /app
+
+    volumes:
+      - ./react-auth:/app
+
+    command: sleep infinity
+
+    networks:
+      - ci_network
