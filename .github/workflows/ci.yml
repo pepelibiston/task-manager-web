@@ -1,130 +1,304 @@
+
 name: CI
 
 on:
+
+  # Ejecutar cuando se hace push a main
   push:
     branches:
       - main
 
+  # Ejecutar cuando se crea/actualiza un Pull Request hacia main
   pull_request:
     branches:
       - main
 
+
 jobs:
+
   test:
-    name: Test application
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
-      # --------------------------------------------------
-      # 1. Descargar código
-      # --------------------------------------------------
+
+      # ==========================================
+      # 1. Descargar el repositorio
+      # ==========================================
       - name: Checkout
         uses: actions/checkout@v4
 
-      # --------------------------------------------------
-      # 2. Levantar infraestructura
-      # --------------------------------------------------
+
+      # ==========================================
+      # 2. Comprobar Docker
+      # ==========================================
+      - name: Docker version
+        run: docker --version
+
+      - name: Docker Compose version
+        run: docker compose version
+
+
+      # ==========================================
+      # 3. Construir y arrancar los servicios
+      # ==========================================
       - name: Start Docker services
         run: |
-          docker compose -f docker-compose.ci.yml up -d --build
+          docker compose \
+            -f docker-compose.ci.yml \
+            up -d --build
 
-      # --------------------------------------------------
-      # 3. Esperar a que las bases de datos estén listas
-      # --------------------------------------------------
-      - name: Wait for databases
+
+      # ==========================================
+      # 4. Mostrar estado de los contenedores
+      # ==========================================
+      - name: Docker containers
         run: |
-          echo "Waiting for PostgreSQL..."
-          until docker compose -f docker-compose.ci.yml exec -T db_server1 \
-            pg_isready -U root -d auth_db; do
-            sleep 2
-          done
+          docker compose \
+            -f docker-compose.ci.yml \
+            ps
 
-          echo "PostgreSQL is ready"
 
-          echo "Waiting for MySQL..."
-          until docker compose -f docker-compose.ci.yml exec -T db_server3 \
-            mysqladmin ping -h localhost -u root -proot --silent; do
-            sleep 2
-          done
-
-          echo "MySQL is ready"
-
-      # --------------------------------------------------
-      # 4. Instalar dependencias Laravel
-      # --------------------------------------------------
-      - name: Install auth-service dependencies
+      # ==========================================
+      # 5. Instalar Composer - Auth Service
+      # ==========================================
+      - name: Install Auth dependencies
         run: |
-          docker compose -f docker-compose.ci.yml exec -T auth-service \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
             composer install \
             --no-interaction \
             --prefer-dist \
             --no-progress
 
-      - name: Install task-service dependencies
+
+      # ==========================================
+      # 6. Instalar Composer - Task Service
+      # ==========================================
+      - name: Install Task dependencies
         run: |
-          docker compose -f docker-compose.ci.yml exec -T task-service \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
             composer install \
             --no-interaction \
             --prefer-dist \
             --no-progress
 
-      # --------------------------------------------------
-      # 5. Preparar Laravel
-      # --------------------------------------------------
-      - name: Prepare auth-service
+
+      # ==========================================
+      # 7. Generar APP_KEY - Auth
+      # ==========================================
+      - name: Generate Auth APP_KEY
         run: |
-          docker compose -f docker-compose.ci.yml exec -T auth-service \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan key:generate --force
+
+
+      # ==========================================
+      # 8. Generar APP_KEY - Task
+      # ==========================================
+      - name: Generate Task APP_KEY
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan key:generate --force
+
+
+      # ==========================================
+      # 9. Limpiar configuración Laravel
+      # ==========================================
+      - name: Clear Laravel caches
+        run: |
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
             php artisan config:clear
 
-          docker compose -f docker-compose.ci.yml exec -T auth-service \
-            php artisan migrate --force
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan cache:clear
 
-      - name: Prepare task-service
-        run: |
-          docker compose -f docker-compose.ci.yml exec -T task-service \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
             php artisan config:clear
 
-          docker compose -f docker-compose.ci.yml exec -T task-service \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan cache:clear
+
+
+      # ==========================================
+      # 10. Estado de las migraciones - Auth
+      # ==========================================
+      - name: Auth migration status
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan migrate:status
+
+
+      # ==========================================
+      # 11. Ejecutar migraciones - Auth
+      # ==========================================
+      - name: Auth migrations
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
             php artisan migrate --force
 
-      # --------------------------------------------------
-      # 6. Ejecutar tests Laravel
-      # --------------------------------------------------
-      - name: Test auth-service
-        run: |
-          docker compose -f docker-compose.ci.yml exec -T auth-service \
-            php artisan test
 
-      - name: Test task-service
+      # ==========================================
+      # 12. Estado de las migraciones - Task
+      # ==========================================
+      - name: Task migration status
         run: |
-          docker compose -f docker-compose.ci.yml exec -T task-service \
-            php artisan test
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan migrate:status
 
-      # --------------------------------------------------
-      # 7. Test frontend
-      # --------------------------------------------------
+
+      # ==========================================
+      # 13. Ejecutar migraciones - Task
+      # ==========================================
+      - name: Task migrations
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan migrate --force
+
+
+      # ==========================================
+      # 14. Información Auth
+      # ==========================================
+      - name: Auth application info
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan about
+
+
+      # ==========================================
+      # 15. Tests Auth
+      # ==========================================
+      - name: Run Auth tests
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan test -v
+
+
+      # ==========================================
+      # 16. Información Task
+      # ==========================================
+      - name: Task application info
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan about
+
+
+      # ==========================================
+      # 17. Tests Task
+      # ==========================================
+      - name: Run Task tests
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan test -v
+
+
+      # ==========================================
+      # 18. Instalar dependencias React
+      # ==========================================
       - name: Install React dependencies
         run: |
-          docker compose -f docker-compose.ci.yml exec -T react-auth \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T react-auth \
             npm ci
 
+
+      # ==========================================
+      # 19. Build React
+      # ==========================================
       - name: Build React
         run: |
-          docker compose -f docker-compose.ci.yml exec -T react-auth \
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T react-auth \
             npm run build
 
-      # --------------------------------------------------
-      # 8. Mostrar logs si algo falla
-      # --------------------------------------------------
-      - name: Docker logs
+
+      # ==========================================
+      # 20. Mostrar logs si algo falla
+      # ==========================================
+      - name: Show Docker logs
         if: failure()
         run: |
-          docker compose -f docker-compose.ci.yml logs
+          echo "=========================================="
+          echo "DOCKER CONTAINERS"
+          echo "=========================================="
 
-      # --------------------------------------------------
-      # 9. Limpiar
-      # --------------------------------------------------
+          docker compose \
+            -f docker-compose.ci.yml \
+            ps
+
+          echo "=========================================="
+          echo "AUTH SERVICE LOGS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs auth-service
+
+          echo "=========================================="
+          echo "TASK SERVICE LOGS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs task-service
+
+          echo "=========================================="
+          echo "POSTGRES LOGS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs db_server1
+
+          echo "=========================================="
+          echo "MYSQL LOGS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs db_server3
+
+
+      # ==========================================
+      # 21. Limpiar contenedores
+      # ==========================================
       - name: Shutdown
         if: always()
         run: |
-          docker compose -f docker-compose.ci.yml down -v
+          docker compose \
+            -f docker-compose.ci.yml \
+            down -v
