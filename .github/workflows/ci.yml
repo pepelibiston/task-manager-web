@@ -89,17 +89,39 @@ jobs:
 
 
       # ==========================================================
+      # GENERATE APP KEYS
+      # ==========================================================
+
+      - name: Generate Laravel APP keys
+        id: app_keys
+        run: |
+          set -e
+
+          AUTH_APP_KEY="base64:$(openssl rand -base64 32)"
+          TASK_APP_KEY="base64:$(openssl rand -base64 32)"
+
+          {
+            echo "AUTH_APP_KEY=$AUTH_APP_KEY"
+            echo "TASK_APP_KEY=$TASK_APP_KEY"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Laravel APP keys generated."
+
+
+      # ==========================================================
       # AUTH .ENV
       # ==========================================================
 
       - name: Prepare Auth .env
+        env:
+          AUTH_APP_KEY: ${{ steps.app_keys.outputs.AUTH_APP_KEY }}
         run: |
           set -e
 
           printf '%s\n' \
             'APP_NAME=AuthService' \
             'APP_ENV=testing' \
-            'APP_KEY=' \
+            "APP_KEY=$AUTH_APP_KEY" \
             'APP_DEBUG=true' \
             'APP_URL=http://localhost' \
             '' \
@@ -119,6 +141,8 @@ jobs:
             'JWT_ISSUER=auth-service' \
             > ci-keys/auth/.env
 
+          chmod 644 ci-keys/auth/.env
+
           test -s ci-keys/auth/.env
 
           echo "Auth .env created."
@@ -129,13 +153,15 @@ jobs:
       # ==========================================================
 
       - name: Prepare Task .env
+        env:
+          TASK_APP_KEY: ${{ steps.app_keys.outputs.TASK_APP_KEY }}
         run: |
           set -e
 
           printf '%s\n' \
             'APP_NAME=TaskService' \
             'APP_ENV=testing' \
-            'APP_KEY=' \
+            "APP_KEY=$TASK_APP_KEY" \
             'APP_DEBUG=true' \
             'APP_URL=http://localhost' \
             '' \
@@ -153,6 +179,8 @@ jobs:
             'JWT_TTL=60' \
             'JWT_ISSUER=auth-service' \
             > ci-keys/task/.env
+
+          chmod 644 ci-keys/task/.env
 
           test -s ci-keys/task/.env
 
@@ -314,7 +342,8 @@ jobs:
             exec -T auth-service \
             sh -c '
               test -s /var/www/html/.env
-              echo "Auth .env exists."
+              grep -q "^APP_KEY=base64:" /var/www/html/.env
+              echo "Auth .env exists and APP_KEY is configured."
             '
 
       - name: Verify Task .env
@@ -326,24 +355,14 @@ jobs:
             exec -T task-service \
             sh -c '
               test -s /var/www/html/.env
-              echo "Task .env exists."
+              grep -q "^APP_KEY=base64:" /var/www/html/.env
+              echo "Task .env exists and APP_KEY is configured."
             '
 
 
       # ==========================================================
       # INSTALL COMPOSER DEPENDENCIES
       # ==========================================================
-      #
-      # IMPORTANTE:
-      # Composer va ANTES de cualquier php artisan.
-      #
-      # Esto crea:
-      #
-      #   /var/www/html/vendor/autoload.php
-      #
-      # Además, como .env y JWT ya existen, Laravel puede ejecutar
-      # package:discover sin producir el error anterior.
-      #
 
       - name: Install Auth dependencies
         run: |
@@ -370,29 +389,6 @@ jobs:
               --prefer-dist \
               --no-progress \
               --optimize-autoloader
-
-
-      # ==========================================================
-      # GENERATE APP KEY
-      # ==========================================================
-
-      - name: Generate Auth APP_KEY
-        run: |
-          set -e
-
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T auth-service \
-            php artisan key:generate --force
-
-      - name: Generate Task APP_KEY
-        run: |
-          set -e
-
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T task-service \
-            php artisan key:generate --force
 
 
       # ==========================================================
