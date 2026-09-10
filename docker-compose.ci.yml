@@ -1,8 +1,10 @@
+
 services:
 
   # ============================================================
   # POSTGRES - AUTH SERVICE
   # ============================================================
+
   db_server1:
     image: postgres:13
 
@@ -28,6 +30,7 @@ services:
   # ============================================================
   # MYSQL - TASK SERVICE
   # ============================================================
+
   db_server3:
     image: mysql:8.0
 
@@ -57,6 +60,7 @@ services:
   # ============================================================
   # AUTH SERVICE - LARAVEL
   # ============================================================
+
   auth-service:
     build:
       context: ./auth-service
@@ -84,7 +88,7 @@ services:
       # .env generado por GitHub Actions
       - ./ci-keys/auth/.env:/var/www/html/.env
 
-      # Claves JWT
+      # JWT
       - ./ci-keys/auth/jwt-private.pem:/var/www/html/storage/keys/jwt-private.pem
       - ./ci-keys/auth/jwt-public.pem:/var/www/html/storage/keys/jwt-public.pem
 
@@ -99,6 +103,7 @@ services:
   # ============================================================
   # TASK SERVICE - LARAVEL
   # ============================================================
+
   task-service:
     build:
       context: ./task-service
@@ -125,7 +130,7 @@ services:
       # .env generado por GitHub Actions
       - ./ci-keys/task/.env:/var/www/html/.env
 
-      # Task solo necesita la clave pública
+      # Task solamente necesita la clave pública
       - ./ci-keys/task/jwt-public.pem:/var/www/html/storage/keys/jwt-public.pem
 
     depends_on:
@@ -139,6 +144,7 @@ services:
   # ============================================================
   # REACT AUTH
   # ============================================================
+
   react-auth:
     image: node:20
 
@@ -147,12 +153,11 @@ services:
     volumes:
       - ./react-auth:/app
 
-    # En CI no necesitamos ejecutar Vite.
-    # El contenedor permanece activo para ejecutar:
+    # El contenedor queda vivo para que CI pueda ejecutar:
     #
     #   npm ci
     #   npm run build
-    #
+
     command: sleep infinity
 
     networks:
@@ -162,6 +167,7 @@ services:
 # ============================================================
 # NETWORK
 # ============================================================
+
 networks:
   ci_network:
     driver: bridge

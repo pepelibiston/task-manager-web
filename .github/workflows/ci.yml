@@ -10,7 +10,6 @@ on:
     branches:
       - main
 
-
 jobs:
   test:
     name: Build and Test
@@ -18,25 +17,28 @@ jobs:
 
     steps:
 
-      # ============================================================
+      # ==========================================================
       # CHECKOUT
-      # ============================================================
+      # ==========================================================
+
       - name: Checkout
         uses: actions/checkout@v4
 
 
-      # ============================================================
+      # ==========================================================
       # DOCKER VERSION
-      # ============================================================
+      # ==========================================================
+
       - name: Docker version
         run: |
           docker --version
           docker compose version
 
 
-      # ============================================================
-      # PREPARE JWT KEYS
-      # ============================================================
+      # ==========================================================
+      # JWT KEYS
+      # ==========================================================
+
       - name: Prepare JWT keys
         env:
           JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY }}
@@ -70,9 +72,10 @@ jobs:
           echo "JWT keys created successfully."
 
 
-      # ============================================================
+      # ==========================================================
       # VALIDATE JWT PRIVATE KEY
-      # ============================================================
+      # ==========================================================
+
       - name: Validate JWT private key
         run: |
           set -e
@@ -85,78 +88,81 @@ jobs:
           echo "JWT private key is valid."
 
 
-      # ============================================================
-      # PREPARE AUTH .ENV
-      # ============================================================
+      # ==========================================================
+      # AUTH .ENV
+      # ==========================================================
+
       - name: Prepare Auth .env
         run: |
           set -e
 
-          cat > ci-keys/auth/.env <<'EOF'
-          APP_NAME=AuthService
-          APP_ENV=testing
-          APP_KEY=
-          APP_DEBUG=true
-          APP_URL=http://localhost
-
-          LOG_CHANNEL=stderr
-          LOG_LEVEL=debug
-
-          DB_CONNECTION=pgsql
-          DB_HOST=db_server1
-          DB_PORT=5432
-          DB_DATABASE=auth_db
-          DB_USERNAME=root
-          DB_PASSWORD=root
-
-          JWT_ALGO=RS256
-          JWT_TTL=60
-          JWT_PASSPHRASE=
-          JWT_ISSUER=auth-service
-          EOF
+          printf '%s\n' \
+            'APP_NAME=AuthService' \
+            'APP_ENV=testing' \
+            'APP_KEY=' \
+            'APP_DEBUG=true' \
+            'APP_URL=http://localhost' \
+            '' \
+            'LOG_CHANNEL=stderr' \
+            'LOG_LEVEL=debug' \
+            '' \
+            'DB_CONNECTION=pgsql' \
+            'DB_HOST=db_server1' \
+            'DB_PORT=5432' \
+            'DB_DATABASE=auth_db' \
+            'DB_USERNAME=root' \
+            'DB_PASSWORD=root' \
+            '' \
+            'JWT_ALGO=RS256' \
+            'JWT_TTL=60' \
+            'JWT_PASSPHRASE=' \
+            'JWT_ISSUER=auth-service' \
+            > ci-keys/auth/.env
 
           test -s ci-keys/auth/.env
 
           echo "Auth .env created."
 
 
-      # ============================================================
-      # PREPARE TASK .ENV
-      # ============================================================
+      # ==========================================================
+      # TASK .ENV
+      # ==========================================================
+
       - name: Prepare Task .env
         run: |
           set -e
 
-          cat > ci-keys/task/.env <<'EOF'
-          APP_NAME=TaskService
-          APP_ENV=testing
-          APP_KEY=
-          APP_DEBUG=true
-          APP_URL=http://localhost
-
-          LOG_CHANNEL=stderr
-          LOG_LEVEL=debug
-
-          DB_CONNECTION=mysql
-          DB_HOST=db_server3
-          DB_PORT=3306
-          DB_DATABASE=task_db
-          DB_USERNAME=root
-          DB_PASSWORD=root
-
-          JWT_ALGO=RS256
-          JWT_TTL=60
-          JWT_ISSUER=auth-service
-          EOF
+          printf '%s\n' \
+            'APP_NAME=TaskService' \
+            'APP_ENV=testing' \
+            'APP_KEY=' \
+            'APP_DEBUG=true' \
+            'APP_URL=http://localhost' \
+            '' \
+            'LOG_CHANNEL=stderr' \
+            'LOG_LEVEL=debug' \
+            '' \
+            'DB_CONNECTION=mysql' \
+            'DB_HOST=db_server3' \
+            'DB_PORT=3306' \
+            'DB_DATABASE=task_db' \
+            'DB_USERNAME=root' \
+            'DB_PASSWORD=root' \
+            '' \
+            'JWT_ALGO=RS256' \
+            'JWT_TTL=60' \
+            'JWT_ISSUER=auth-service' \
+            > ci-keys/task/.env
 
           test -s ci-keys/task/.env
 
           echo "Task .env created."
 
 
-      # ============================================================
-      # BUILD DOCKER IMAGES
-      # ============================================================
+      # ==========================================================
+      # BUILD
+      # ==========================================================
+
       - name: Build Docker images
         run: |
           set -e
@@ -166,9 +172,10 @@ jobs:
             build
 
 
-      # ============================================================
+      # ==========================================================
       # START DATABASES
-      # ============================================================
+      # ==========================================================
+
       - name: Start databases
         run: |
           set -e
@@ -180,9 +187,10 @@ jobs:
             db_server3
 
 
-      # ============================================================
+      # ==========================================================
       # WAIT FOR DATABASES
-      # ============================================================
+      # ==========================================================
+
       - name: Wait for databases
         run: |
           set -e
@@ -215,14 +223,10 @@ jobs:
           echo "MySQL is ready."
 
 
-      # ============================================================
+      # ==========================================================
       # START LARAVEL SERVICES
-      # ============================================================
-      #
-      # Los .env y las claves YA existen en los volúmenes antes
-      # de arrancar estos contenedores.
-      #
-      # ============================================================
+      # ==========================================================
+
       - name: Start Laravel services
         run: |
           set -e
@@ -234,9 +238,10 @@ jobs:
             task-service
 
 
-      # ============================================================
+      # ==========================================================
       # START REACT
-      # ============================================================
+      # ==========================================================
+
       - name: Start React
         run: |
           set -e
@@ -247,9 +252,10 @@ jobs:
             react-auth
 
 
-      # ============================================================
+      # ==========================================================
       # SHOW CONTAINERS
-      # ============================================================
+      # ==========================================================
+
       - name: Docker containers
         run: |
           docker compose \
@@ -257,9 +263,10 @@ jobs:
             ps
 
 
-      # ============================================================
-      # VERIFY AUTH JWT FILES
-      # ============================================================
+      # ==========================================================
+      # VERIFY JWT KEYS
+      # ==========================================================
+
       - name: Verify Auth JWT keys
         run: |
           set -e
@@ -277,10 +284,6 @@ jobs:
               echo "Auth JWT keys are available."
             '
 
-
-      # ============================================================
-      # VERIFY TASK JWT FILE
-      # ============================================================
       - name: Verify Task JWT key
         run: |
           set -e
@@ -298,9 +301,10 @@ jobs:
             '
 
 
-      # ============================================================
-      # VERIFY AUTH .ENV
-      # ============================================================
+      # ==========================================================
+      # VERIFY .ENV
+      # ==========================================================
+
       - name: Verify Auth .env
         run: |
           set -e
@@ -313,10 +317,6 @@ jobs:
               echo "Auth .env exists."
             '
 
-
-      # ============================================================
-      # VERIFY TASK .ENV
-      # ============================================================
       - name: Verify Task .env
         run: |
           set -e
@@ -330,35 +330,21 @@ jobs:
             '
 
 
-      # ============================================================
-      # GENERATE AUTH APP KEY
-      # ============================================================
-      - name: Generate Auth APP_KEY
-        run: |
-          set -e
+      # ==========================================================
+      # INSTALL COMPOSER DEPENDENCIES
+      # ==========================================================
+      #
+      # IMPORTANTE:
+      # Composer va ANTES de cualquier php artisan.
+      #
+      # Esto crea:
+      #
+      #   /var/www/html/vendor/autoload.php
+      #
+      # Además, como .env y JWT ya existen, Laravel puede ejecutar
+      # package:discover sin producir el error anterior.
+      #
 
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T auth-service \
-            php artisan key:generate --force
-
-
-      # ============================================================
-      # GENERATE TASK APP KEY
-      # ============================================================
-      - name: Generate Task APP_KEY
-        run: |
-          set -e
-
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T task-service \
-            php artisan key:generate --force
-
-
-      # ============================================================
-      # INSTALL AUTH DEPENDENCIES
-      # ============================================================
       - name: Install Auth dependencies
         run: |
           set -e
@@ -372,10 +358,6 @@ jobs:
               --no-progress \
               --optimize-autoloader
 
-
-      # ============================================================
-      # INSTALL TASK DEPENDENCIES
-      # ============================================================
       - name: Install Task dependencies
         run: |
           set -e
@@ -390,9 +372,33 @@ jobs:
               --optimize-autoloader
 
 
-      # ============================================================
+      # ==========================================================
+      # GENERATE APP KEY
+      # ==========================================================
+
+      - name: Generate Auth APP_KEY
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan key:generate --force
+
+      - name: Generate Task APP_KEY
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan key:generate --force
+
+
+      # ==========================================================
       # CLEAR LARAVEL CACHE
-      # ============================================================
+      # ==========================================================
+
       - name: Clear Laravel cache
         run: |
           set -e
@@ -408,9 +414,10 @@ jobs:
             php artisan optimize:clear
 
 
-      # ============================================================
-      # AUTH MIGRATION STATUS
-      # ============================================================
+      # ==========================================================
+      # AUTH MIGRATIONS
+      # ==========================================================
+
       - name: Auth migration status
         run: |
           set -e
@@ -420,10 +427,6 @@ jobs:
             exec -T auth-service \
             php artisan migrate:status
 
-
-      # ============================================================
-      # AUTH MIGRATIONS
-      # ============================================================
       - name: Auth migrations
         run: |
           set -e
@@ -434,9 +437,10 @@ jobs:
             php artisan migrate --force
 
 
-      # ============================================================
-      # TASK MIGRATION STATUS
-      # ============================================================
+      # ==========================================================
+      # TASK MIGRATIONS
+      # ==========================================================
+
       - name: Task migration status
         run: |
           set -e
@@ -446,10 +450,6 @@ jobs:
             exec -T task-service \
             php artisan migrate:status
 
-
-      # ============================================================
-      # TASK MIGRATIONS
-      # ============================================================
       - name: Task migrations
         run: |
           set -e
@@ -460,9 +460,10 @@ jobs:
             php artisan migrate --force
 
 
-      # ============================================================
-      # AUTH TESTS
-      # ============================================================
+      # ==========================================================
+      # LARAVEL TESTS
+      # ==========================================================
+
       - name: Run Auth tests
         run: |
           set -e
@@ -472,10 +473,6 @@ jobs:
             exec -T auth-service \
             php artisan test -v
 
-
-      # ============================================================
-      # TASK TESTS
-      # ============================================================
       - name: Run Task tests
         run: |
           set -e
@@ -486,9 +483,10 @@ jobs:
             php artisan test -v
 
 
-      # ============================================================
-      # INSTALL REACT DEPENDENCIES
-      # ============================================================
+      # ==========================================================
+      # REACT
+      # ==========================================================
+
       - name: Install React dependencies
         run: |
           set -e
@@ -498,10 +496,6 @@ jobs:
             exec -T react-auth \
             npm ci
 
-
-      # ============================================================
-      # BUILD REACT
-      # ============================================================
       - name: Build React
         run: |
           set -e
@@ -512,9 +506,10 @@ jobs:
             npm run build
 
 
-      # ============================================================
-      # SHOW LOGS IF FAILURE
-      # ============================================================
+      # ==========================================================
+      # LOGS IF FAILURE
+      # ==========================================================
+
       - name: Show Docker logs
         if: failure()
         run: |
@@ -567,9 +562,10 @@ jobs:
             logs react-auth
 
 
-      # ============================================================
-      # SHUTDOWN
-      # ============================================================
+      # ==========================================================
+      # CLEANUP
+      # ==========================================================
+
       - name: Shutdown
         if: always()
         run: |
