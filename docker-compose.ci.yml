@@ -81,14 +81,12 @@ services:
       JWT_ISSUER: auth-service
 
     volumes:
-      # GitHub Actions crea estos archivos antes de
-      # arrancar los contenedores.
-      #
-      # Auth necesita:
-      #   jwt-private.pem
-      #   jwt-public.pem
-      #
-      - ./ci-keys/auth:/var/www/html/storage/keys
+      # .env generado por GitHub Actions
+      - ./ci-keys/auth/.env:/var/www/html/.env
+
+      # Claves JWT
+      - ./ci-keys/auth/jwt-private.pem:/var/www/html/storage/keys/jwt-private.pem
+      - ./ci-keys/auth/jwt-public.pem:/var/www/html/storage/keys/jwt-public.pem
 
     depends_on:
       db_server1:
@@ -124,9 +122,11 @@ services:
       JWT_ISSUER: auth-service
 
     volumes:
-      # Task solamente necesita la clave pública.
-      #
-      - ./ci-keys/task:/var/www/html/storage/keys
+      # .env generado por GitHub Actions
+      - ./ci-keys/task/.env:/var/www/html/.env
+
+      # Task solo necesita la clave pública
+      - ./ci-keys/task/jwt-public.pem:/var/www/html/storage/keys/jwt-public.pem
 
     depends_on:
       db_server3:
@@ -148,7 +148,7 @@ services:
       - ./react-auth:/app
 
     # En CI no necesitamos ejecutar Vite.
-    # Mantenemos el contenedor vivo para poder ejecutar:
+    # El contenedor permanece activo para ejecutar:
     #
     #   npm ci
     #   npm run build
