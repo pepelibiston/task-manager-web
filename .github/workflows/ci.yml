@@ -1,14 +1,10 @@
-
 name: CI
 
 on:
-
-  # Ejecutar cuando se hace push a main
   push:
     branches:
       - main
 
-  # Ejecutar cuando se crea/actualiza un Pull Request hacia main
   pull_request:
     branches:
       - main
@@ -16,42 +12,140 @@ on:
 
 jobs:
 
+  # ============================================================
+  # BUILD AND TEST
+  # ============================================================
   test:
+
     name: Build and Test
+
     runs-on: ubuntu-latest
+
 
     steps:
 
-      # ==========================================
-      # 1. Descargar el repositorio
-      # ==========================================
+      # ========================================================
+      # CHECKOUT
+      # ========================================================
       - name: Checkout
         uses: actions/checkout@v4
 
 
-      # ==========================================
-      # 2. Comprobar Docker
-      # ==========================================
+      # ========================================================
+      # DOCKER VERSION
+      # ========================================================
       - name: Docker version
-        run: docker --version
+        run: |
+          docker --version
+          docker compose version
 
-      - name: Docker Compose version
-        run: docker compose version
+
+      # ========================================================
+      # CREATE JWT KEYS
+      # ========================================================
+      #
+      # Las claves NO están en Git.
+      #
+      # GitHub Secrets:
+      #   JWT_PRIVATE_KEY
+      #   JWT_PUBLIC_KEY
+      #
+      # Auth necesita:
+      #   jwt-private.pem
+      #   jwt-public.pem
+      #
+      # Task necesita:
+      #   jwt-public.pem
+      #
+      # ========================================================
+      - name: Prepare JWT keys
+        env:
+          JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY }}
+          JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY }}
+        run: |
+          set -e
+
+          mkdir -p ci-keys/auth
+          mkdir -p ci-keys/task
+
+          printf '%s\n' "$JWT_PRIVATE_KEY" \
+            > ci-keys/auth/jwt-private.pem
+
+          printf '%s\n' "$JWT_PUBLIC_KEY" \
+            > ci-keys/auth/jwt-public.pem
+
+          cp ci-keys/auth/jwt-public.pem \
+            ci-keys/task/jwt-public.pem
+
+          # Permisos compatibles con PHP/Apache dentro del contenedor
+          chmod 644 ci-keys/auth/jwt-private.pem
+          chmod 644 ci-keys/auth/jwt-public.pem
+          chmod 644 ci-keys/task/jwt-public.pem
+
+          echo "JWT files created:"
+          ls -la ci-keys/auth
+          ls -la ci-keys/task
 
 
-      # ==========================================
-      # 3. Construir y arrancar los servicios
-      # ==========================================
+      # ========================================================
+      # VALIDATE JWT KEYS
+      # ========================================================
+      - name: Validate JWT keys
+        run: |
+          set -e
+
+          test -s ci-keys/auth/jwt-private.pem
+          test -s ci-keys/auth/jwt-public.pem
+          test -s ci-keys/task/jwt-public.pem
+
+          openssl rsa \
+            -in ci-keys/auth/jwt-private.pem \
+            -check \
+            -noout
+
+          openssl pkey \
+            -in ci-keys/auth/jwt-private.pem \
+            -pubout \
+            -out /tmp/generated-public.pem
+
+          diff \
+            /tmp/generated-public.pem \
+            ci-keys/auth/jwt-public.pem
+
+          echo "JWT keys are valid and match."
+
+
+      # ========================================================
+      # BUILD DOCKER IMAGES
+      # ========================================================
+      #
+      # IMPORTANTE:
+      # Los Dockerfiles NO deben ejecutar composer install.
+      #
+      # Composer se ejecutará después de crear .env y montar
+      # las claves JWT.
+      #
+      # ========================================================
+      - name: Build Docker images
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            build
+
+
+      # ========================================================
+      # START DATABASES AND SERVICES
+      # ========================================================
       - name: Start Docker services
         run: |
           docker compose \
             -f docker-compose.ci.yml \
-            up -d --build
+            up -d
 
 
-      # ==========================================
-      # 4. Mostrar estado de los contenedores
-      # ==========================================
+      # ========================================================
+      # SHOW CONTAINERS
+      # ========================================================
       - name: Docker containers
         run: |
           docker compose \
@@ -59,9 +153,128 @@ jobs:
             ps
 
 
-      # ==========================================
-      # 5. Instalar Composer - Auth Service
-      # ==========================================
+      # ========================================================
+      # VERIFY JWT KEYS INSIDE CONTAINERS
+      # ========================================================
+      - name: Verify JWT keys inside containers
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "AUTH SERVICE KEYS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            sh -c '
+              pwd
+              ls -la /var/www/html/storage
+              ls -la /var/www/html/storage/keys
+              test -f /var/www/html/storage/keys/jwt-private.pem
+              test -f /var/www/html/storage/keys/jwt-public.pem
+            '
+
+          echo "=========================================="
+          echo "TASK SERVICE KEYS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            sh -c '
+              pwd
+              ls -la /var/www/html/storage
+              ls -la /var/www/html/storage/keys
+              test -f /var/www/html/storage/keys/jwt-public.pem
+            '
+
+
+      # ========================================================
+      # CREATE AUTH .ENV
+      # ========================================================
+      - name: Create Auth .env
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            sh -c 'cat > /var/www/html/.env <<EOF
+          APP_NAME=AuthService
+          APP_ENV=testing
+          APP_KEY=
+          APP_DEBUG=true
+          APP_URL=http://localhost
+
+          LOG_CHANNEL=stderr
+          LOG_LEVEL=debug
+
+          DB_CONNECTION=pgsql
+          DB_HOST=db_server1
+          DB_PORT=5432
+          DB_DATABASE=auth_db
+          DB_USERNAME=root
+          DB_PASSWORD=root
+
+          JWT_ALGO=RS256
+          JWT_TTL=60
+          JWT_PASSPHRASE=
+          JWT_ISSUER=auth-service
+          EOF'
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            sh -c 'test -f /var/www/html/.env'
+
+
+      # ========================================================
+      # CREATE TASK .ENV
+      # ========================================================
+      - name: Create Task .env
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            sh -c 'cat > /var/www/html/.env <<EOF
+          APP_NAME=TaskService
+          APP_ENV=testing
+          APP_KEY=
+          APP_DEBUG=true
+          APP_URL=http://localhost
+
+          LOG_CHANNEL=stderr
+          LOG_LEVEL=debug
+
+          DB_CONNECTION=mysql
+          DB_HOST=db_server3
+          DB_PORT=3306
+          DB_DATABASE=task_db
+          DB_USERNAME=root
+          DB_PASSWORD=root
+
+          JWT_ALGO=RS256
+          JWT_TTL=60
+          JWT_ISSUER=auth-service
+          EOF'
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            sh -c 'test -f /var/www/html/.env'
+
+
+      # ========================================================
+      # INSTALL AUTH COMPOSER DEPENDENCIES
+      # ========================================================
+      #
+      # AQUÍ ya existen:
+      #   - .env
+      #   - jwt-private.pem
+      #   - jwt-public.pem
+      #
+      # Por tanto Laravel puede cargar config/jwt.php.
+      #
+      # ========================================================
       - name: Install Auth dependencies
         run: |
           docker compose \
@@ -70,12 +283,13 @@ jobs:
             composer install \
             --no-interaction \
             --prefer-dist \
-            --no-progress
+            --no-progress \
+            --optimize-autoloader
 
 
-      # ==========================================
-      # 6. Instalar Composer - Task Service
-      # ==========================================
+      # ========================================================
+      # INSTALL TASK COMPOSER DEPENDENCIES
+      # ========================================================
       - name: Install Task dependencies
         run: |
           docker compose \
@@ -84,12 +298,13 @@ jobs:
             composer install \
             --no-interaction \
             --prefer-dist \
-            --no-progress
+            --no-progress \
+            --optimize-autoloader
 
 
-      # ==========================================
-      # 7. Generar APP_KEY - Auth
-      # ==========================================
+      # ========================================================
+      # GENERATE AUTH APP KEY
+      # ========================================================
       - name: Generate Auth APP_KEY
         run: |
           docker compose \
@@ -98,9 +313,9 @@ jobs:
             php artisan key:generate --force
 
 
-      # ==========================================
-      # 8. Generar APP_KEY - Task
-      # ==========================================
+      # ========================================================
+      # GENERATE TASK APP KEY
+      # ========================================================
       - name: Generate Task APP_KEY
         run: |
           docker compose \
@@ -109,36 +324,26 @@ jobs:
             php artisan key:generate --force
 
 
-      # ==========================================
-      # 9. Limpiar configuración Laravel
-      # ==========================================
-      - name: Clear Laravel caches
+      # ========================================================
+      # CLEAR LARAVEL CACHE
+      # ========================================================
+      - name: Clear Laravel cache
         run: |
 
           docker compose \
             -f docker-compose.ci.yml \
             exec -T auth-service \
-            php artisan config:clear
-
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T auth-service \
-            php artisan cache:clear
+            php artisan optimize:clear
 
           docker compose \
             -f docker-compose.ci.yml \
             exec -T task-service \
-            php artisan config:clear
-
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T task-service \
-            php artisan cache:clear
+            php artisan optimize:clear
 
 
-      # ==========================================
-      # 10. Estado de las migraciones - Auth
-      # ==========================================
+      # ========================================================
+      # AUTH MIGRATION STATUS
+      # ========================================================
       - name: Auth migration status
         run: |
           docker compose \
@@ -147,9 +352,9 @@ jobs:
             php artisan migrate:status
 
 
-      # ==========================================
-      # 11. Ejecutar migraciones - Auth
-      # ==========================================
+      # ========================================================
+      # AUTH MIGRATIONS
+      # ========================================================
       - name: Auth migrations
         run: |
           docker compose \
@@ -158,9 +363,9 @@ jobs:
             php artisan migrate --force
 
 
-      # ==========================================
-      # 12. Estado de las migraciones - Task
-      # ==========================================
+      # ========================================================
+      # TASK MIGRATION STATUS
+      # ========================================================
       - name: Task migration status
         run: |
           docker compose \
@@ -169,9 +374,9 @@ jobs:
             php artisan migrate:status
 
 
-      # ==========================================
-      # 13. Ejecutar migraciones - Task
-      # ==========================================
+      # ========================================================
+      # TASK MIGRATIONS
+      # ========================================================
       - name: Task migrations
         run: |
           docker compose \
@@ -180,20 +385,9 @@ jobs:
             php artisan migrate --force
 
 
-      # ==========================================
-      # 14. Información Auth
-      # ==========================================
-      - name: Auth application info
-        run: |
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T auth-service \
-            php artisan about
-
-
-      # ==========================================
-      # 15. Tests Auth
-      # ==========================================
+      # ========================================================
+      # AUTH TESTS
+      # ========================================================
       - name: Run Auth tests
         run: |
           docker compose \
@@ -202,20 +396,9 @@ jobs:
             php artisan test -v
 
 
-      # ==========================================
-      # 16. Información Task
-      # ==========================================
-      - name: Task application info
-        run: |
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T task-service \
-            php artisan about
-
-
-      # ==========================================
-      # 17. Tests Task
-      # ==========================================
+      # ========================================================
+      # TASK TESTS
+      # ========================================================
       - name: Run Task tests
         run: |
           docker compose \
@@ -224,9 +407,9 @@ jobs:
             php artisan test -v
 
 
-      # ==========================================
-      # 18. Instalar dependencias React
-      # ==========================================
+      # ========================================================
+      # INSTALL REACT DEPENDENCIES
+      # ========================================================
       - name: Install React dependencies
         run: |
           docker compose \
@@ -235,9 +418,9 @@ jobs:
             npm ci
 
 
-      # ==========================================
-      # 19. Build React
-      # ==========================================
+      # ========================================================
+      # BUILD REACT
+      # ========================================================
       - name: Build React
         run: |
           docker compose \
@@ -246,14 +429,15 @@ jobs:
             npm run build
 
 
-      # ==========================================
-      # 20. Mostrar logs si algo falla
-      # ==========================================
+      # ========================================================
+      # FAILURE LOGS
+      # ========================================================
       - name: Show Docker logs
         if: failure()
         run: |
+
           echo "=========================================="
-          echo "DOCKER CONTAINERS"
+          echo "CONTAINERS"
           echo "=========================================="
 
           docker compose \
@@ -261,7 +445,7 @@ jobs:
             ps
 
           echo "=========================================="
-          echo "AUTH SERVICE LOGS"
+          echo "AUTH SERVICE"
           echo "=========================================="
 
           docker compose \
@@ -269,7 +453,7 @@ jobs:
             logs auth-service
 
           echo "=========================================="
-          echo "TASK SERVICE LOGS"
+          echo "TASK SERVICE"
           echo "=========================================="
 
           docker compose \
@@ -277,7 +461,7 @@ jobs:
             logs task-service
 
           echo "=========================================="
-          echo "POSTGRES LOGS"
+          echo "POSTGRES"
           echo "=========================================="
 
           docker compose \
@@ -285,20 +469,41 @@ jobs:
             logs db_server1
 
           echo "=========================================="
-          echo "MYSQL LOGS"
+          echo "MYSQL"
           echo "=========================================="
 
           docker compose \
             -f docker-compose.ci.yml \
             logs db_server3
 
+          echo "=========================================="
+          echo "AUTH LARAVEL LOG"
+          echo "=========================================="
 
-      # ==========================================
-      # 21. Limpiar contenedores
-      # ==========================================
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            sh -c 'cat storage/logs/laravel.log 2>/dev/null || true'
+
+          echo "=========================================="
+          echo "TASK LARAVEL LOG"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            sh -c 'cat storage/logs/laravel.log 2>/dev/null || true'
+
+
+      # ========================================================
+      # CLEANUP
+      # ========================================================
       - name: Shutdown
         if: always()
         run: |
+
           docker compose \
             -f docker-compose.ci.yml \
             down -v
+
+          rm -rf ci-keys

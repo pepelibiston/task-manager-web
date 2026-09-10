@@ -1,4 +1,3 @@
-
 services:
 
   # ============================================================
@@ -82,7 +81,13 @@ services:
       JWT_ISSUER: auth-service
 
     volumes:
-      # Las claves son generadas temporalmente por GitHub Actions
+      # GitHub Actions crea estos archivos antes de
+      # arrancar los contenedores.
+      #
+      # Auth necesita:
+      #   jwt-private.pem
+      #   jwt-public.pem
+      #
       - ./ci-keys/auth:/var/www/html/storage/keys
 
     depends_on:
@@ -119,8 +124,8 @@ services:
       JWT_ISSUER: auth-service
 
     volumes:
-      # Task solamente necesita la clave pública
-      # generada a partir de la privada de auth-service
+      # Task solamente necesita la clave pública.
+      #
       - ./ci-keys/task:/var/www/html/storage/keys
 
     depends_on:
@@ -132,7 +137,7 @@ services:
 
 
   # ============================================================
-  # REACT
+  # REACT AUTH
   # ============================================================
   react-auth:
     image: node:20
@@ -142,18 +147,21 @@ services:
     volumes:
       - ./react-auth:/app
 
-    # No necesitamos levantar Vite durante CI.
-    # El contenedor simplemente permanece ejecutándose
-    # para que GitHub Actions pueda ejecutar npm ci / npm run build.
+    # En CI no necesitamos ejecutar Vite.
+    # Mantenemos el contenedor vivo para poder ejecutar:
+    #
+    #   npm ci
+    #   npm run build
+    #
     command: sleep infinity
 
     networks:
       - ci_network
 
 
-# ==============================================================
+# ============================================================
 # NETWORK
-# ==============================================================
+# ============================================================
 networks:
   ci_network:
     driver: bridge
