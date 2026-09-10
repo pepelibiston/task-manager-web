@@ -11,6 +11,8 @@ volumes:
     driver: local
   db_serve3_data:
     driver: local
+  react_node_modules:
+    driver: local
 
 services:
   # Servicio PostgreSQL
@@ -36,27 +38,25 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: order_db
+      MYSQL_DATABASE: task_db
       MYSQL_PASSWORD: root
     ports:
       - "3311:3306"
     volumes:
-      - db_serve2_data:/data/db # Nombre dek volume correspondiente
+      - db_serve2_data:/var/lib/mysql # Nombre dek volume correspondiente
     networks:
       - laravel_network
 
   auth-service:
     build:
-      context: ./laravel-jwt-api-starter-main
+      context: ./auth-service
       dockerfile: Dockerfile
     container_name: auth-service
     restart: unless-stopped
-    ports:
-      - "8080:80"
     working_dir: /var/www/html
     # temporal para pruebas
     volumes:
-      - ./laravel-jwt-api-starter-main:/var/www/html
+      - ./auth-service:/var/www/html
     environment:
       APP_ENV: local
       APP_DEBUG: true
@@ -67,8 +67,68 @@ services:
       DB_DATABASE: auth_db
       DB_USERNAME: root
       DB_PASSWORD: root
-      JWT_SECRET: QjT1cMO3euXYspkKnT9wgTpQ7qnoEKmZ6eBwXZPlUbwEnjVel11ugut4dOYOlCtG
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_PASSPHRASE: null
+      JWT_ISSUER: auth-service
     depends_on:
       - db_server1
+    networks:
+      - laravel_network
+
+  task-service:
+    build:
+      context: ./task-service
+      dockerfile: Dockerfile
+    container_name: task-service
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./task-service:/var/www/html
+    environment:
+      APP_ENV: local
+      APP_DEBUG: true
+      APP_KEY: base64:xvA0aDWjp1Dp9HX112yU9giTtJdU8ZFe+iKK+Y6VZGE=
+      DB_HOST: db_server3
+      DB_CONNECTION: mysql
+      DB_PORT: 3306
+      DB_DATABASE: task_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_ISSUER: auth-service
+
+    depends_on:
+      - db_server3
+    networks:
+      - laravel_network
+
+  react-auth:
+    image: node:20
+    container_name: react-auth
+    working_dir: /app
+    volumes:
+      - ./react-auth:/app
+      - react_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    networks:
+      - laravel_network
+    depends_on:
+      - auth-service
+
+  api-gateway:
+    image: nginx:alpine
+    container_name: api-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - task-service
     networks:
       - laravel_network

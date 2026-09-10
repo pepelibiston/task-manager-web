@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
 import api from "../api/axios";
 import { useNavigate } from "react-router-dom";
 
@@ -7,105 +13,193 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const navigate = useNavigate();
 
-  // ✅ Cargar usuario si hay token guardado
+  // ============================================================
+  // CARGAR USUARIO SI EXISTE UN TOKEN
+  // ============================================================
+
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      api
-        .get("/user")
-        .then((res) => {
-          setUser(res.data);
-        })
-        .catch(() => {
-          setUser(null);
-          localStorage.removeItem("token");
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    const loadUser = async () => {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // El interceptor de Axios también añadirá el token,
+        // pero lo dejamos disponible desde el principio.
+        api.defaults.headers.common[
+          "Authorization"
+        ] = `Bearer ${token}`;
+
+        const response = await api.get("/user");
+
+        setUser(response.data);
+      } catch (error) {
+        console.error(
+          "No se pudo recuperar el usuario:",
+          error
+        );
+
+        localStorage.removeItem("token");
+
+        delete api.defaults.headers.common[
+          "Authorization"
+        ];
+
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUser();
   }, []);
 
-  // ✅ Login
+  // ============================================================
+  // LOGIN
+  // ============================================================
+
   const login = async (email, password) => {
     try {
-      const res = await api.post("/login", { email, password });
-      const token = res.data.authorization.token || res.data.authorization.access_token;
+      const response = await api.post("/login", {
+        email,
+        password,
+      });
 
-      // Guarda token
+      const token =
+        response.data.authorization?.token ||
+        response.data.authorization?.access_token;
+
+      if (!token) {
+        throw new Error(
+          "La API no devolvió un token"
+        );
+      }
+
+      // Guardar token
       localStorage.setItem("token", token);
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      // Obtén usuario
-      const userRes = await api.get("/user");
-      setUser(userRes.data);
+      // Guardarlo también en Axios
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${token}`;
+
+      // Obtener usuario autenticado
+      const userResponse = await api.get("/user");
+
+      setUser(userResponse.data);
 
       navigate("/dashboard");
-    } catch (err) {
-      console.error("Error al iniciar sesión:", err);
+    } catch (error) {
+      console.error(
+        "Error al iniciar sesión:",
+        error
+      );
+
       throw new Error("Credenciales inválidas");
     }
   };
 
-    // ✅ Register
-  const register = async (name, email, password) => {
+  // ============================================================
+  // REGISTER
+  // ============================================================
+
+  const register = async (
+    name,
+    email,
+    password
+  ) => {
     try {
-      const res = await api.post("/register", { name, email, password });
-      const token = res.data.authorization.token || res.data.authorization.access_token;
+      const response = await api.post("/register", {
+        name,
+        email,
+        password,
+      });
 
-      // Guarda token
+      const token =
+        response.data.authorization?.token ||
+        response.data.authorization?.access_token;
+
+      if (!token) {
+        throw new Error(
+          "La API no devolvió un token"
+        );
+      }
+
+      // Guardar token
       localStorage.setItem("token", token);
-      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      // Obtén usuario
-      const userRes = await api.get("/user");
-      setUser(userRes.data);
+      // Guardarlo también en Axios
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${token}`;
+
+      // Obtener usuario autenticado
+      const userResponse = await api.get("/user");
+
+      setUser(userResponse.data);
 
       navigate("/dashboard");
-    } catch (err) {
-      console.error("Error al registrarse:", err);
-      throw new Error("No se pudo registrar el usuario");
+    } catch (error) {
+      console.error(
+        "Error al registrarse:",
+        error
+      );
+
+      throw new Error(
+        "No se pudo registrar el usuario"
+      );
     }
   };
 
-  // ✅ Logout
+  // ============================================================
+  // LOGOUT
+  // ============================================================
+
   const logout = async () => {
     try {
       await api.post("/logout");
-    } catch (err) {
-      console.warn("Error en logout (token ya expirado o inválido)", err);
+    } catch (error) {
+      console.warn(
+        "Error en logout (token expirado o inválido):",
+        error
+      );
     } finally {
       localStorage.removeItem("token");
-      delete api.defaults.headers.common["Authorization"];
+
+      delete api.defaults.headers.common[
+        "Authorization"
+      ];
+
       setUser(null);
+
       navigate("/login");
     }
   };
 
-  const refreshToken = async () => {
-  try {
-    const res = await api.post("/refresh");
-    const newToken = res.data.authorization?.access_token;
-
-    // ✅ Guardar el nuevo token
-    localStorage.setItem("token", newToken);
-    api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
-
-    console.log("🔄 Token renovado automáticamente");
-  } catch (err) {
-    console.error("Error al refrescar token:", err);
-    logout(); // cerrar sesión si el refresh falla
-  }
-};
+  // ============================================================
+  // CONTEXT
+  // ============================================================
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, refreshToken, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        loading,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () =>
+  useContext(AuthContext);
