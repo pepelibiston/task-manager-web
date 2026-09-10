@@ -11,6 +11,7 @@ use Tymon\JWTAuth\Exceptions\TokenExpiredException;
 use Tymon\JWTAuth\Exceptions\TokenInvalidException;
 use Tymon\JWTAuth\Exceptions\TokenBlacklistedException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Auth\AuthenticationException;
 
 class Handler extends ExceptionHandler
 {
@@ -31,19 +32,42 @@ class Handler extends ExceptionHandler
     public function register(): void
     {
         $this->reportable(
-            reportUsing: fn(TokenInvalidException | TokenExpiredException | TokenBlacklistedException $e) => throw new OAuthException(code: 'token_could_not_verified')
+            reportUsing: fn(
+                TokenInvalidException |
+                TokenExpiredException |
+                TokenBlacklistedException $e
+            ) => throw new OAuthException(
+                code: 'token_could_not_verified',
+                statusCode: Response::HTTP_UNAUTHORIZED
+            )
         );
 
         $this->reportable(
             reportUsing: fn(JWTException $e) => throw new OAuthException(code: 'token_could_not_parse', statusCode: Response::HTTP_INTERNAL_SERVER_ERROR)
         );
 
-        $this->reportable(
+        /*$this->reportable(
             reportUsing: fn(Throwable $e) => //dd($e)
             throw new GraphApiException(
                 //check if app is in production
                 message: config('app.env') !== 'production' ? $e->getMessage() : 'Sorry, There was something went wrong on our side, Please try again later.'
             )
-        );
+        );*/
+    }
+
+    protected function unauthenticated(
+        $request,
+        AuthenticationException $exception
+    ) {
+        return response()->json([
+            'error' => [
+                'message' => 'Unauthenticated.',
+                'type' => 'OAuthException',
+                'code' => 'unauthenticated',
+                'trace_id' => substr(str_shuffle(
+                    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"
+                ), 0, 16),
+            ],
+        ], Response::HTTP_UNAUTHORIZED);
     }
 }

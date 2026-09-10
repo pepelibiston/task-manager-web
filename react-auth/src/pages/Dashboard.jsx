@@ -1,11 +1,11 @@
-
 import { useEffect, useState } from "react";
 import {
   DragDropContext,
   Droppable,
   Draggable,
 } from "@hello-pangea/dnd";
-import { apiTask } from "../api/axios";
+import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
 
 const columnToStatus = {
   pending: "pending",
@@ -37,6 +37,8 @@ const formatTask = (task) => ({
 });
 
 function Dashboard() {
+  const { logout } = useAuth();
+
   const [tasks, setTasks] = useState({
     pending: [],
     inProgress: [],
@@ -51,9 +53,7 @@ function Dashboard() {
   // =========================================================
 
   const [showModal, setShowModal] = useState(false);
-
   const [modalMode, setModalMode] = useState("create");
-
   const [editingTask, setEditingTask] = useState(null);
 
   const [newTask, setNewTask] = useState({
@@ -74,7 +74,7 @@ function Dashboard() {
       setLoading(true);
       setError("");
 
-      const response = await apiTask.get("/tasks");
+      const response = await api.get("/tasks");
 
       let taskList = [];
 
@@ -192,8 +192,8 @@ function Dashboard() {
         priority: newTask.priority,
       };
 
-      const response = await apiTask.post(
-        "/task",
+      const response = await api.post(
+        "/tasks",
         payload
       );
 
@@ -248,7 +248,7 @@ function Dashboard() {
         priority: newTask.priority,
       };
 
-      const response = await apiTask.put(
+      const response = await api.put(
         `/tasks/${editingTask.id}`,
         payload
       );
@@ -355,7 +355,7 @@ function Dashboard() {
       const newStatus =
         columnToStatus[destination.droppableId];
 
-      await apiTask.put(
+      await api.put(
         `/tasks/${movedTask.id}`,
         {
           status: newStatus,
@@ -491,7 +491,6 @@ function Dashboard() {
                 : "shadow-sm hover:shadow-md hover:-translate-y-0.5"
             }`}
           >
-            {/* PRIORIDAD + ACCIONES */}
             <div className="flex items-center justify-between mb-3">
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${priority.className}`}
@@ -537,19 +536,16 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* TÍTULO */}
             <h3 className="font-semibold text-gray-900 leading-snug">
               {task.title}
             </h3>
 
-            {/* DESCRIPCIÓN */}
             {task.description && (
               <p className="text-sm text-gray-500 mt-2 leading-relaxed line-clamp-3">
                 {task.description}
               </p>
             )}
 
-            {/* FOOTER */}
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
               {task.date ? (
                 <span className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -582,7 +578,6 @@ function Dashboard() {
         key={column.id}
         className="flex flex-col min-w-0"
       >
-        {/* CABECERA */}
         <div
           className={`rounded-2xl ${column.headerBg} border border-gray-200/80 p-4 mb-3`}
         >
@@ -611,7 +606,6 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* DROP ZONE */}
         <Droppable droppableId={column.id}>
           {(provided, snapshot) => (
             <div
@@ -726,16 +720,50 @@ function Dashboard() {
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-gray-800 text-white px-5 py-3 rounded-xl font-semibold shadow-sm hover:shadow-md transition-all"
-          >
-            <span className="text-lg leading-none">
-              +
-            </span>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* CERRAR SESIÓN */}
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-xl font-semibold shadow-sm hover:shadow-md transition-all"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-5 h-5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15"
+                />
 
-            Nueva tarea
-          </button>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M18 15l3-3m0 0l-3-3m3 3H9"
+                />
+              </svg>
+
+              Cerrar sesión
+            </button>
+
+            {/* NUEVA TAREA */}
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-gray-800 text-white px-5 py-3 rounded-xl font-semibold shadow-sm hover:shadow-md transition-all"
+            >
+              <span className="text-lg leading-none">
+                +
+              </span>
+
+              Nueva tarea
+            </button>
+          </div>
         </header>
 
         {/* ERROR */}
@@ -758,6 +786,7 @@ function Dashboard() {
             </div>
 
             <button
+              type="button"
               onClick={fetchTasks}
               className="text-sm font-semibold text-red-700 hover:text-red-900 underline"
             >
@@ -1030,9 +1059,7 @@ function Dashboard() {
 
                 <div>
                   <p className="text-sm font-semibold text-gray-800">
-                    {modalMode === "edit"
-                      ? "Pendiente"
-                      : "Pendiente"}
+                    Pendiente
                   </p>
 
                   <p className="text-xs text-gray-400">

@@ -3,10 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Requests\LoginRequest;
-use Illuminate\Support\Facades\Auth;
+use App\Http\Requests\RegisterRequest;
 use Illuminate\Support\Facades\Hash;
 use App\Support\Traits\Authenticatable;
 use App\Support\Exceptions\OAuthException;
@@ -19,25 +18,31 @@ class AuthController extends Controller
     /**
      * Registro de usuario con JWT inmediato.
      */
-    public function register(Request $request): JsonResponse
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:6',
-        ]);
+        $validated = $request->validated();
 
-        // Crear usuario
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
         ]);
 
-        // Generar token JWT para el nuevo usuario
-        $token = Auth::login($user);
+        // Usamos el mismo mecanismo JWT que funciona en login()
+        $token = JWTAuth::claims([
+            'iss' => config('jwt.issuer'),
+        ])->attempt([
+            'email' => $user['email'],
+            'password' => $user['password'],
+        ]);
 
-        return $this->responseWithToken(access_token: $token);
+        if (!$token) {
+            throw new OAuthException(
+                code: 'invalid_credentials_provided'
+            );
+        }
+
+        return $this->responseWithToken($token);
     }
 
     /**

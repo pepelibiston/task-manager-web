@@ -1,19 +1,11 @@
 import axios from "axios";
 
 // ============================================================
-// INSTANCIAS AXIOS
+// API GATEWAY
 // ============================================================
 
-export const apiAuth = axios.create({
-  baseURL: import.meta.env.VITE_AUTH_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  },
-});
-
-export const apiTask = axios.create({
-  baseURL: import.meta.env.VITE_TASK_API_URL,
+export const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -50,22 +42,19 @@ const logout = () => {
 let refreshPromise = null;
 
 const refreshToken = async () => {
-  // Ya hay un refresh en curso
   if (refreshPromise) {
     return refreshPromise;
   }
 
-  refreshPromise = apiAuth
-    .post("/refresh")
+  refreshPromise = api
+    .get("/refresh")
     .then((response) => {
       const newToken =
         response.data.authorization?.token ||
         response.data.authorization?.access_token;
 
       if (!newToken) {
-        throw new Error(
-          "La API no devolvió un nuevo token"
-        );
+        throw new Error("La API no devolvió un nuevo token");
       }
 
       saveToken(newToken);
@@ -96,87 +85,70 @@ const refreshToken = async () => {
 // REQUEST INTERCEPTOR
 // ============================================================
 
-const addAuthInterceptor = (api) => {
-  api.interceptors.request.use(
-    (config) => {
-      const token = getToken();
+api.interceptors.request.use(
+  (config) => {
+    const token = getToken();
 
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
-};
-
-
-// Añadimos el JWT a ambas APIs
-addAuthInterceptor(apiAuth);
-addAuthInterceptor(apiTask);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 
 // ============================================================
 // RESPONSE INTERCEPTOR
 // ============================================================
 
-const addResponseInterceptor = (api) => {
-  api.interceptors.response.use(
-    (response) => response,
+api.interceptors.response.use(
+  (response) => response,
 
-    async (error) => {
-      const originalRequest = error.config;
+  async (error) => {
+    const originalRequest = error.config;
 
-      if (!originalRequest) {
-        return Promise.reject(error);
-      }
-
-      // Solo actuar ante un 401
-      if (error.response?.status !== 401) {
-        return Promise.reject(error);
-      }
-
-      // Evitar bucles infinitos
-      if (originalRequest._retry) {
-        return Promise.reject(error);
-      }
-
-      // Nunca intentar refresh sobre el propio endpoint /refresh
-      const url = originalRequest.url || "";
-
-      if (url.includes("/refresh")) {
-        return Promise.reject(error);
-      }
-
-      originalRequest._retry = true;
-
-      try {
-        // Si ya hay otro refresh en curso, esperará ese refresh.
-        const newToken = await refreshToken();
-
-        // Actualizar el token de la petición original
-        originalRequest.headers.Authorization =
-          `Bearer ${newToken}`;
-
-        // Repetir la petición original
-        return api(originalRequest);
-
-      } catch (refreshError) {
-        return Promise.reject(refreshError);
-      }
+    if (!originalRequest) {
+      return Promise.reject(error);
     }
-  );
-};
 
+    // Solo actuar ante un 401
+    if (error.response?.status !== 401) {
+      return Promise.reject(error);
+    }
 
-// Añadimos el interceptor a ambas APIs
-addResponseInterceptor(apiAuth);
-addResponseInterceptor(apiTask);
+    // Evitar bucles infinitos
+    if (originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // Nunca hacer refresh sobre /refresh
+    const url = originalRequest.url || "";
+
+    if (url.includes("/refresh")) {
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      const newToken = await refreshToken();
+
+      originalRequest.headers.Authorization =
+        `Bearer ${newToken}`;
+
+      return api(originalRequest);
+
+    } catch (refreshError) {
+      return Promise.reject(refreshError);
+    }
+  }
+);
 
 
 // ============================================================
 // DEFAULT EXPORT
 // ============================================================
 
-export default apiAuth;
+export default api;
