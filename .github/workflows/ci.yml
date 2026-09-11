@@ -364,15 +364,6 @@ jobs:
             exec -T task-service \
             php artisan optimize:clear
 
-      - name: Auth migration status
-        run: |
-          set -e
-
-          docker compose \
-            -f docker-compose.ci.yml \
-            exec -T auth-service \
-            php artisan migrate:status
-
       - name: Auth migrations
         run: |
           set -e
@@ -382,13 +373,13 @@ jobs:
             exec -T auth-service \
             php artisan migrate --force
 
-      - name: Task migration status
+      - name: Auth migration status
         run: |
           set -e
 
           docker compose \
             -f docker-compose.ci.yml \
-            exec -T task-service \
+            exec -T auth-service \
             php artisan migrate:status
 
       - name: Task migrations
@@ -399,6 +390,15 @@ jobs:
             -f docker-compose.ci.yml \
             exec -T task-service \
             php artisan migrate --force
+
+      - name: Task migration status
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan migrate:status
 
       - name: Run Auth tests
         run: |
