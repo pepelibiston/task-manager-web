@@ -1,0 +1,173 @@
+
+services:
+
+  # ============================================================
+  # POSTGRES - AUTH SERVICE
+  # ============================================================
+
+  db_server1:
+    image: postgres:13
+
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: auth_db
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U root -d auth_db"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - ci_network
+
+
+  # ============================================================
+  # MYSQL - TASK SERVICE
+  # ============================================================
+
+  db_server3:
+    image: mysql:8.0
+
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: task_db
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-uroot",
+          "-proot"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - ci_network
+
+
+  # ============================================================
+  # AUTH SERVICE - LARAVEL
+  # ============================================================
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+
+    working_dir: /var/www/html
+
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: true
+
+      DB_CONNECTION: pgsql
+      DB_HOST: db_server1
+      DB_PORT: 5432
+      DB_DATABASE: auth_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_PASSPHRASE: ""
+      JWT_ISSUER: auth-service
+
+    volumes:
+      # .env generado por GitHub Actions
+      - ./ci-keys/auth/.env:/var/www/html/.env
+
+      # JWT
+      - ./ci-keys/auth/jwt-private.pem:/var/www/html/storage/keys/jwt-private.pem
+      - ./ci-keys/auth/jwt-public.pem:/var/www/html/storage/keys/jwt-public.pem
+
+    depends_on:
+      db_server1:
+        condition: service_healthy
+
+    networks:
+      - ci_network
+
+
+  # ============================================================
+  # TASK SERVICE - LARAVEL
+  # ============================================================
+
+  task-service:
+    build:
+      context: ./task-service
+      dockerfile: Dockerfile
+
+    working_dir: /var/www/html
+
+    environment:
+      APP_ENV: testing
+      APP_DEBUG: true
+
+      DB_CONNECTION: mysql
+      DB_HOST: db_server3
+      DB_PORT: 3306
+      DB_DATABASE: task_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+
+      JWT_ALGO: RS256
+      JWT_TTL: 60
+      JWT_ISSUER: auth-service
+
+    volumes:
+      # .env generado por GitHub Actions
+      - ./ci-keys/task/.env:/var/www/html/.env
+
+      # Task solamente necesita la clave pública
+      - ./ci-keys/task/jwt-public.pem:/var/www/html/storage/keys/jwt-public.pem
+
+    depends_on:
+      db_server3:
+        condition: service_healthy
+
+    networks:
+      - ci_network
+
+
+  # ============================================================
+  # REACT AUTH
+  # ============================================================
+
+  react-auth:
+    image: node:20
+
+    working_dir: /app
+
+    volumes:
+      - ./react-auth:/app
+
+    # El contenedor queda vivo para que CI pueda ejecutar:
+    #
+    #   npm ci
+    #   npm run build
+
+    command: sleep infinity
+
+    networks:
+      - ci_network
+
+
+# ============================================================
+# NETWORK
+# ============================================================
+
+networks:
+  ci_network:
+    driver: bridge
