@@ -70,6 +70,8 @@ services:
       JWT_TTL: 60
       JWT_PASSPHRASE: null
       JWT_ISSUER: auth-service
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: info
     depends_on:
       - db_server1
     networks:
@@ -96,7 +98,8 @@ services:
       JWT_ALGO: RS256
       JWT_TTL: 60
       JWT_ISSUER: auth-service
-
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: info
     depends_on:
       - db_server3
     networks:
