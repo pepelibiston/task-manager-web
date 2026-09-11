@@ -407,7 +407,7 @@ jobs:
           docker compose \
             -f docker-compose.ci.yml \
             exec -T auth-service \
-            php artisan test -v
+            php artisan test
 
       - name: Run Task tests
         run: |
@@ -416,7 +416,7 @@ jobs:
           docker compose \
             -f docker-compose.ci.yml \
             exec -T task-service \
-            php artisan test -v
+            php artisan test
 
       - name: Install React dependencies
         run: |
