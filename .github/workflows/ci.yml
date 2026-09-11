@@ -1,578 +1,497 @@
 name: CI
 
 on:
-push:
-branches:
-- main
-
-pull_request:
-branches:
-- main
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-test:
-name: Build and Test
-runs-on: ubuntu-latest
-steps:
-
-  - name: Checkout
-    uses: actions/checkout@v4
-
-  - name: Docker version
-    run: |
-      docker --version
-      docker compose version
-
-  # ============================================================
-  # JWT KEYS
-  # ============================================================
-
-  - name: Prepare JWT keys
-    env:
-      JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY }}
-      JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY }}
-    run: |
-      set -e
-
-      mkdir -p ci-keys/auth
-      mkdir -p ci-keys/task
-
-      printf '%s\n' "$JWT_PRIVATE_KEY" \
-        | sed 's/\r$//' \
-        > ci-keys/auth/jwt-private.pem
-
-      printf '%s\n' "$JWT_PUBLIC_KEY" \
-        | sed 's/\r$//' \
-        > ci-keys/auth/jwt-public.pem
-
-      cp \
-        ci-keys/auth/jwt-public.pem \
-        ci-keys/task/jwt-public.pem
-
-      chmod 644 ci-keys/auth/jwt-private.pem
-      chmod 644 ci-keys/auth/jwt-public.pem
-      chmod 644 ci-keys/task/jwt-public.pem
-
-      test -s ci-keys/auth/jwt-private.pem
-      test -s ci-keys/auth/jwt-public.pem
-      test -s ci-keys/task/jwt-public.pem
-
-      echo "JWT keys created successfully."
-
-  - name: Validate JWT private key
-    run: |
-      set -e
-
-      openssl rsa \
-        -in ci-keys/auth/jwt-private.pem \
-        -check \
-        -noout
-
-      echo "JWT private key is valid."
-
-  # ============================================================
-  # LARAVEL APP KEYS
-  # ============================================================
-
-  - name: Generate Laravel APP keys
-    id: app_keys
-    run: |
-      set -e
-
-      AUTH_APP_KEY="base64:$(openssl rand -base64 32)"
-      TASK_APP_KEY="base64:$(openssl rand -base64 32)"
-
-      {
-        echo "AUTH_APP_KEY=$AUTH_APP_KEY"
-        echo "TASK_APP_KEY=$TASK_APP_KEY"
-      } >> "$GITHUB_OUTPUT"
-
-      echo "Laravel APP keys generated."
-
-  # ============================================================
-  # AUTH .ENV
-  # ============================================================
-
-  - name: Prepare Auth .env
-    env:
-      AUTH_APP_KEY: ${{ steps.app_keys.outputs.AUTH_APP_KEY }}
-    run: |
-      set -e
-
-      printf '%s\n' \
-        'APP_NAME=AuthService' \
-        'APP_ENV=testing' \
-        "APP_KEY=$AUTH_APP_KEY" \
-        'APP_DEBUG=true' \
-        'APP_URL=http://localhost' \
-        '' \
-        'LOG_CHANNEL=stderr' \
-        'LOG_LEVEL=debug' \
-        '' \
-        'DB_CONNECTION=pgsql' \
-        'DB_HOST=db_server1' \
-        'DB_PORT=5432' \
-        'DB_DATABASE=auth_db' \
-        'DB_USERNAME=root' \
-        'DB_PASSWORD=root' \
-        '' \
-        'CACHE_STORE=array' \
-        'SESSION_DRIVER=array' \
-        'QUEUE_CONNECTION=sync' \
-        '' \
-        'JWT_ALGO=RS256' \
-        'JWT_TTL=60' \
-        'JWT_PASSPHRASE=' \
-        'JWT_ISSUER=auth-service' \
-        > ci-keys/auth/.env
-
-      chmod 644 ci-keys/auth/.env
-
-      test -s ci-keys/auth/.env
-
-      echo "Auth .env created."
-
-  # ============================================================
-  # TASK .ENV
-  # ============================================================
-
-  - name: Prepare Task .env
-    env:
-      TASK_APP_KEY: ${{ steps.app_keys.outputs.TASK_APP_KEY }}
-    run: |
-      set -e
-
-      printf '%s\n' \
-        'APP_NAME=TaskService' \
-        'APP_ENV=testing' \
-        "APP_KEY=$TASK_APP_KEY" \
-        'APP_DEBUG=true' \
-        'APP_URL=http://localhost' \
-        '' \
-        'LOG_CHANNEL=stderr' \
-        'LOG_LEVEL=debug' \
-        '' \
-        'DB_CONNECTION=mysql' \
-        'DB_HOST=db_server3' \
-        'DB_PORT=3306' \
-        'DB_DATABASE=task_db' \
-        'DB_USERNAME=root' \
-        'DB_PASSWORD=root' \
-        '' \
-        'CACHE_STORE=array' \
-        'SESSION_DRIVER=array' \
-        'QUEUE_CONNECTION=sync' \
-        '' \
-        'JWT_ALGO=RS256' \
-        'JWT_TTL=60' \
-        'JWT_ISSUER=auth-service' \
-        > ci-keys/task/.env
-
-      chmod 644 ci-keys/task/.env
-
-      test -s ci-keys/task/.env
-
-      echo "Task .env created."
-
-  # ============================================================
-  # DOCKER BUILD
-  # ============================================================
-
-  - name: Build Docker images
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        build
-
-  # ============================================================
-  # DATABASES
-  # ============================================================
-
-  - name: Start databases
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        up -d \
-        db_server1 \
-        db_server3
-
-  - name: Wait for databases
-    run: |
-      set -e
-
-      echo "Waiting for PostgreSQL..."
-
-      until docker compose \
-        -f docker-compose.ci.yml \
-        exec -T db_server1 \
-        pg_isready -U root -d auth_db
-      do
-        sleep 2
-      done
-
-      echo "PostgreSQL is ready."
-
-      echo "Waiting for MySQL..."
-
-      until docker compose \
-        -f docker-compose.ci.yml \
-        exec -T db_server3 \
-        mysqladmin ping \
-          -h localhost \
-          -uroot \
-          -proot
-      do
-        sleep 2
-      done
-
-      echo "MySQL is ready."
-
-  # ============================================================
-  # LARAVEL SERVICES
-  # ============================================================
-
-  - name: Start Laravel services
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        up -d \
-        auth-service \
-        task-service
-
-  # ============================================================
-  # REACT
-  # ============================================================
-
-  - name: Start React
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        up -d \
-        react-auth
-
-  # ============================================================
-  # CONTAINERS STATUS
-  # ============================================================
-
-  - name: Docker containers
-    run: |
-      docker compose \
-        -f docker-compose.ci.yml \
-        ps
-
-  # ============================================================
-  # VERIFY JWT
-  # ============================================================
-
-  - name: Verify Auth JWT keys
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T auth-service \
-        sh -c '
-          echo "JWT directory:"
-          ls -la /var/www/html/storage/keys
-
-          test -f /var/www/html/storage/keys/jwt-private.pem
-          test -f /var/www/html/storage/keys/jwt-public.pem
-
-          echo "Auth JWT keys are available."
-        '
-
-  - name: Verify Task JWT key
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T task-service \
-        sh -c '
-          echo "JWT directory:"
-          ls -la /var/www/html/storage/keys
-
-          test -f /var/www/html/storage/keys/jwt-public.pem
-
-          echo "Task JWT public key is available."
-        '
-
-  # ============================================================
-  # VERIFY .ENV
-  # ============================================================
-
-  - name: Verify Auth .env
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T auth-service \
-        sh -c '
-          test -s /var/www/html/.env
-          grep -q "^APP_KEY=base64:" /var/www/html/.env
-          echo "Auth .env exists and APP_KEY is configured."
-        '
-
-  - name: Verify Task .env
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T task-service \
-        sh -c '
-          test -s /var/www/html/.env
-          grep -q "^APP_KEY=base64:" /var/www/html/.env
-          echo "Task .env exists and APP_KEY is configured."
-        '
-
-  # ============================================================
-  # COMPOSER AUTH
-  # ============================================================
-
-  - name: Install Auth dependencies
-    run: |
-      set -e
-
-      for attempt in 1 2 3 4 5
-      do
-        echo "Composer Auth attempt $attempt/5..."
-
-        if docker compose \
-          -f docker-compose.ci.yml \
-          exec -T auth-service \
-          composer install \
-            --no-interaction \
-            --prefer-dist \
-            --no-progress \
-            --optimize-autoloader
-        then
-          echo "Auth Composer install succeeded."
-          break
-        fi
-
-        if [ "$attempt" -eq 5 ]; then
-          echo "Auth Composer install failed after 5 attempts."
-          exit 1
-        fi
-
-        echo "Composer failed. Waiting 15 seconds before retry..."
-        sleep 15
-      done
-
-  # ============================================================
-  # COMPOSER TASK
-  # ============================================================
-
-  - name: Install Task dependencies
-    run: |
-      set -e
-
-      for attempt in 1 2 3 4 5
-      do
-        echo "Composer Task attempt $attempt/5..."
-
-        if docker compose \
-          -f docker-compose.ci.yml \
-          exec -T task-service \
-          composer install \
-            --no-interaction \
-            --prefer-dist \
-            --no-progress \
-            --optimize-autoloader
-        then
-          echo "Task Composer install succeeded."
-          break
-        fi
-
-        if [ "$attempt" -eq 5 ]; then
-          echo "Task Composer install failed after 5 attempts."
-          exit 1
-        fi
-
-        echo "Composer failed. Waiting 15 seconds before retry..."
-        sleep 15
-      done
-
-  # ============================================================
-  # LARAVEL CACHE
-  # ============================================================
-
-  - name: Clear Laravel cache
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T auth-service \
-        php artisan optimize:clear
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T task-service \
-        php artisan optimize:clear
-
-  # ============================================================
-  # AUTH MIGRATIONS
-  # ============================================================
-
-  - name: Auth migration status
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T auth-service \
-        php artisan migrate:status
-
-  - name: Auth migrations
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T auth-service \
-        php artisan migrate --force
-
-  # ============================================================
-  # TASK MIGRATIONS
-  # ============================================================
-
-  - name: Task migration status
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T task-service \
-        php artisan migrate:status
-
-  - name: Task migrations
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T task-service \
-        php artisan migrate --force
-
-  # ============================================================
-  # LARAVEL TESTS
-  # ============================================================
-
-  - name: Run Auth tests
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T auth-service \
-        php artisan test -v
-
-  - name: Run Task tests
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T task-service \
-        php artisan test -v
-
-  # ============================================================
-  # REACT
-  # ============================================================
-
-  - name: Install React dependencies
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T react-auth \
-        npm ci
-
-  - name: Build React
-    run: |
-      set -e
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        exec -T react-auth \
-        npm run build
-
-  # ============================================================
-  # LOGS ON FAILURE
-  # ============================================================
-
-  - name: Show Docker logs
-    if: failure()
-    run: |
-      echo "=========================================="
-      echo "DOCKER CONTAINERS"
-      echo "=========================================="
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        ps
-
-      echo "=========================================="
-      echo "AUTH SERVICE"
-      echo "=========================================="
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        logs auth-service
-
-      echo "=========================================="
-      echo "TASK SERVICE"
-      echo "=========================================="
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        logs task-service
-
-      echo "=========================================="
-      echo "POSTGRES"
-      echo "=========================================="
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        logs db_server1
-
-      echo "=========================================="
-      echo "MYSQL"
-      echo "=========================================="
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        logs db_server3
-
-      echo "=========================================="
-      echo "REACT"
-      echo "=========================================="
-
-      docker compose \
-        -f docker-compose.ci.yml \
-        logs react-auth
-
-  # ============================================================
-  # SHUTDOWN
-  # ============================================================
-
-  - name: Shutdown
-    if: always()
-    run: |
-      docker compose \
-        -f docker-compose.ci.yml \
-        down -v
-
-      rm -rf ci-keys
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker version
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Prepare JWT keys
+        env:
+          JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY }}
+          JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY }}
+        run: |
+          set -e
+
+          mkdir -p ci-keys/auth
+          mkdir -p ci-keys/task
+
+          printf '%s\n' "$JWT_PRIVATE_KEY" \
+            | sed 's/\r$//' \
+            > ci-keys/auth/jwt-private.pem
+
+          printf '%s\n' "$JWT_PUBLIC_KEY" \
+            | sed 's/\r$//' \
+            > ci-keys/auth/jwt-public.pem
+
+          cp \
+            ci-keys/auth/jwt-public.pem \
+            ci-keys/task/jwt-public.pem
+
+          chmod 644 ci-keys/auth/jwt-private.pem
+          chmod 644 ci-keys/auth/jwt-public.pem
+          chmod 644 ci-keys/task/jwt-public.pem
+
+          test -s ci-keys/auth/jwt-private.pem
+          test -s ci-keys/auth/jwt-public.pem
+          test -s ci-keys/task/jwt-public.pem
+
+          echo "JWT keys created successfully."
+
+      - name: Validate JWT private key
+        run: |
+          set -e
+
+          openssl rsa \
+            -in ci-keys/auth/jwt-private.pem \
+            -check \
+            -noout
+
+          echo "JWT private key is valid."
+
+      - name: Generate Laravel APP keys
+        id: app_keys
+        run: |
+          set -e
+
+          AUTH_APP_KEY="base64:$(openssl rand -base64 32)"
+          TASK_APP_KEY="base64:$(openssl rand -base64 32)"
+
+          {
+            echo "AUTH_APP_KEY=$AUTH_APP_KEY"
+            echo "TASK_APP_KEY=$TASK_APP_KEY"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Laravel APP keys generated."
+
+      - name: Prepare Auth .env
+        env:
+          AUTH_APP_KEY: ${{ steps.app_keys.outputs.AUTH_APP_KEY }}
+        run: |
+          set -e
+
+          printf '%s\n' \
+            'APP_NAME=AuthService' \
+            'APP_ENV=testing' \
+            "APP_KEY=$AUTH_APP_KEY" \
+            'APP_DEBUG=true' \
+            'APP_URL=http://localhost' \
+            '' \
+            'LOG_CHANNEL=stderr' \
+            'LOG_LEVEL=debug' \
+            '' \
+            'DB_CONNECTION=pgsql' \
+            'DB_HOST=db_server1' \
+            'DB_PORT=5432' \
+            'DB_DATABASE=auth_db' \
+            'DB_USERNAME=root' \
+            'DB_PASSWORD=root' \
+            '' \
+            'CACHE_STORE=array' \
+            'SESSION_DRIVER=array' \
+            'QUEUE_CONNECTION=sync' \
+            '' \
+            'JWT_ALGO=RS256' \
+            'JWT_TTL=60' \
+            'JWT_PASSPHRASE=' \
+            'JWT_ISSUER=auth-service' \
+            > ci-keys/auth/.env
+
+          chmod 644 ci-keys/auth/.env
+
+          test -s ci-keys/auth/.env
+
+          echo "Auth .env created."
+
+      - name: Prepare Task .env
+        env:
+          TASK_APP_KEY: ${{ steps.app_keys.outputs.TASK_APP_KEY }}
+        run: |
+          set -e
+
+          printf '%s\n' \
+            'APP_NAME=TaskService' \
+            'APP_ENV=testing' \
+            "APP_KEY=$TASK_APP_KEY" \
+            'APP_DEBUG=true' \
+            'APP_URL=http://localhost' \
+            '' \
+            'LOG_CHANNEL=stderr' \
+            'LOG_LEVEL=debug' \
+            '' \
+            'DB_CONNECTION=mysql' \
+            'DB_HOST=db_server3' \
+            'DB_PORT=3306' \
+            'DB_DATABASE=task_db' \
+            'DB_USERNAME=root' \
+            'DB_PASSWORD=root' \
+            '' \
+            'CACHE_STORE=array' \
+            'SESSION_DRIVER=array' \
+            'QUEUE_CONNECTION=sync' \
+            '' \
+            'JWT_ALGO=RS256' \
+            'JWT_TTL=60' \
+            'JWT_ISSUER=auth-service' \
+            > ci-keys/task/.env
+
+          chmod 644 ci-keys/task/.env
+
+          test -s ci-keys/task/.env
+
+          echo "Task .env created."
+
+      - name: Build Docker images
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            build
+
+      - name: Start databases
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            up -d \
+            db_server1 \
+            db_server3
+
+      - name: Wait for databases
+        run: |
+          set -e
+
+          echo "Waiting for PostgreSQL..."
+
+          until docker compose \
+            -f docker-compose.ci.yml \
+            exec -T db_server1 \
+            pg_isready -U root -d auth_db
+          do
+            sleep 2
+          done
+
+          echo "PostgreSQL is ready."
+
+          echo "Waiting for MySQL..."
+
+          until docker compose \
+            -f docker-compose.ci.yml \
+            exec -T db_server3 \
+            mysqladmin ping \
+              -h localhost \
+              -uroot \
+              -proot
+          do
+            sleep 2
+          done
+
+          echo "MySQL is ready."
+
+      - name: Start Laravel services
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            up -d \
+            auth-service \
+            task-service
+
+      - name: Start React
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            up -d \
+            react-auth
+
+      - name: Docker containers
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            ps
+
+      - name: Verify Auth JWT keys
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            sh -c '
+              echo "JWT directory:"
+              ls -la /var/www/html/storage/keys
+
+              test -f /var/www/html/storage/keys/jwt-private.pem
+              test -f /var/www/html/storage/keys/jwt-public.pem
+
+              echo "Auth JWT keys are available."
+            '
+
+      - name: Verify Task JWT key
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            sh -c '
+              echo "JWT directory:"
+              ls -la /var/www/html/storage/keys
+
+              test -f /var/www/html/storage/keys/jwt-public.pem
+
+              echo "Task JWT public key is available."
+            '
+
+      - name: Verify Auth .env
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            sh -c '
+              test -s /var/www/html/.env
+              grep -q "^APP_KEY=base64:" /var/www/html/.env
+              echo "Auth .env exists and APP_KEY is configured."
+            '
+
+      - name: Verify Task .env
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            sh -c '
+              test -s /var/www/html/.env
+              grep -q "^APP_KEY=base64:" /var/www/html/.env
+              echo "Task .env exists and APP_KEY is configured."
+            '
+
+      - name: Install Auth dependencies
+        run: |
+          set -e
+
+          for attempt in 1 2 3 4 5
+          do
+            echo "Composer Auth attempt $attempt/5..."
+
+            if docker compose \
+              -f docker-compose.ci.yml \
+              exec -T auth-service \
+              composer install \
+                --no-interaction \
+                --prefer-dist \
+                --no-progress \
+                --optimize-autoloader
+            then
+              echo "Auth Composer install succeeded."
+              break
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "Auth Composer install failed after 5 attempts."
+              exit 1
+            fi
+
+            echo "Composer failed. Waiting 15 seconds before retry..."
+            sleep 15
+          done
+
+      - name: Install Task dependencies
+        run: |
+          set -e
+
+          for attempt in 1 2 3 4 5
+          do
+            echo "Composer Task attempt $attempt/5..."
+
+            if docker compose \
+              -f docker-compose.ci.yml \
+              exec -T task-service \
+              composer install \
+                --no-interaction \
+                --prefer-dist \
+                --no-progress \
+                --optimize-autoloader
+            then
+              echo "Task Composer install succeeded."
+              break
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "Task Composer install failed after 5 attempts."
+              exit 1
+            fi
+
+            echo "Composer failed. Waiting 15 seconds before retry..."
+            sleep 15
+          done
+
+      - name: Clear Laravel cache
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan optimize:clear
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan optimize:clear
+
+      - name: Auth migration status
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan migrate:status
+
+      - name: Auth migrations
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan migrate --force
+
+      - name: Task migration status
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan migrate:status
+
+      - name: Task migrations
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan migrate --force
+
+      - name: Run Auth tests
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T auth-service \
+            php artisan test -v
+
+      - name: Run Task tests
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T task-service \
+            php artisan test -v
+
+      - name: Install React dependencies
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T react-auth \
+            npm ci
+
+      - name: Build React
+        run: |
+          set -e
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            exec -T react-auth \
+            npm run build
+
+      - name: Show Docker logs
+        if: failure()
+        run: |
+          echo "=========================================="
+          echo "DOCKER CONTAINERS"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            ps
+
+          echo "=========================================="
+          echo "AUTH SERVICE"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs auth-service
+
+          echo "=========================================="
+          echo "TASK SERVICE"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs task-service
+
+          echo "=========================================="
+          echo "POSTGRES"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs db_server1
+
+          echo "=========================================="
+          echo "MYSQL"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs db_server3
+
+          echo "=========================================="
+          echo "REACT"
+          echo "=========================================="
+
+          docker compose \
+            -f docker-compose.ci.yml \
+            logs react-auth
+
+      - name: Shutdown
+        if: always()
+        run: |
+          docker compose \
+            -f docker-compose.ci.yml \
+            down -v
+
+          rm -rf ci-keys
