@@ -108,6 +108,8 @@ jobs:
           echo "Laravel APP keys generated."
 
 
+
+
       # ==========================================================
       # AUTH .ENV
       # ==========================================================
@@ -134,6 +136,10 @@ jobs:
             'DB_DATABASE=auth_db' \
             'DB_USERNAME=root' \
             'DB_PASSWORD=root' \
+            '' \
+            'CACHE_STORE=array' \
+            'SESSION_DRIVER=array' \
+            'QUEUE_CONNECTION=sync' \
             '' \
             'JWT_ALGO=RS256' \
             'JWT_TTL=60' \
@@ -174,6 +180,10 @@ jobs:
             'DB_DATABASE=task_db' \
             'DB_USERNAME=root' \
             'DB_PASSWORD=root' \
+            '' \
+            'CACHE_STORE=array' \
+            'SESSION_DRIVER=array' \
+            'QUEUE_CONNECTION=sync' \
             '' \
             'JWT_ALGO=RS256' \
             'JWT_TTL=60' \
